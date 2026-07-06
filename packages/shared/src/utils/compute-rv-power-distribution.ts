@@ -4,6 +4,7 @@ import type {
 } from "./compute-power-distribution";
 
 export function computeRvPowerDistribution(params: {
+  rv?: any;
   entities: any;
   grid: any;
   solar: any;
