@@ -553,7 +553,24 @@ export class PowerFlowCardPlus extends LitElement {
 
   private _computeRenderData() {
     const { entities } = this._config;
+    const rvMode = this._config.main_config?.rv_mode ?? false;
+    const rv = this._config.rv;
     const initialNumericState = null as null | number;
+    const rvData = {
+      shorePower: {},
+      houseBattery: {},
+      starterBattery: {},
+      solar: {},
+      acLoad: {},
+      dcLoad: {},
+      inverter: {},
+      orion: {},
+    };
+
+    void rvMode;
+    void rv;
+    void rvData;
+
     const grid: GridObject = {
       entity: entities.grid?.entity,
       has: entities?.grid?.entity !== undefined,
@@ -802,6 +819,8 @@ export class PowerFlowCardPlus extends LitElement {
       battery.state.toHome = 0;
     }
     computePowerDistributionAfterSolarAndBattery({
+      rvMode,
+      rv,
       entities: {
         grid: entities.grid,
         battery: entities.battery,

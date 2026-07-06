@@ -10,6 +10,10 @@ import {
 export type DisplayZeroLinesMode = "show" | "grey_out" | "transparency" | "hide" | "custom";
 
 interface mainConfigOptions {
+    /**
+   * Enables RV / Camper power flow logic.
+   */
+  rv_mode?: boolean;
   dashboard_link?: string;
   dashboard_link_label?: string;
   second_dashboard_link?: string;
@@ -54,6 +58,7 @@ export interface FlowCardPlusConfig extends LovelaceCardConfig, mainConfigOption
 
 export interface PowerFlowCardPlusConfig extends LovelaceCardConfig, mainConfigOptions {
   entities: ConfigEntities;
+  rv?: RvConfig;
 }
 
 export interface EnergyFlowCardPlusConfig extends LovelaceCardConfig, mainConfigOptions {
@@ -109,6 +114,34 @@ interface Home extends BaseConfigEntity {
   hide?: boolean;
 }
 
+
+
+interface RvEntity {
+  entity?: string;
+}
+
+interface RvHouseBattery {
+  charge?: string;
+  discharge?: string;
+  soc?: string;
+}
+
+interface RvStarterBattery {
+  voltage?: string;
+  current?: string;
+  power?: string;
+}
+
+export interface RvConfig {
+  shore_power?: RvEntity;
+  solar?: RvEntity;
+  house_battery?: RvHouseBattery;
+  starter_battery?: RvStarterBattery;
+  dc_load?: RvEntity;
+  ac_load?: RvEntity;
+  inverter?: RvEntity;
+  orion?: RvEntity;
+}
 interface FossilFuelPercentage extends BaseConfigEntity {
   entity: string;
   color?: string;

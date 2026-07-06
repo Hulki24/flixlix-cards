@@ -1,5 +1,6 @@
 export type ComputeEntityStateWatts = (entityId: string) => number;
 export type ComputeEntityState = (entityId: string | undefined) => number | null;
+import { computeRvPowerDistribution } from "./compute-rv-power-distribution";
 
 type ToleranceConfig = {
   grid?: { display_zero_tolerance?: number };
@@ -54,6 +55,7 @@ type NonFossil = {
 };
 
 export function computePowerDistributionAfterSolarAndBattery(params: {
+  rvMode?: boolean;
   entities: ToleranceConfig;
   grid: PowerGrid;
   solar: PowerSolar;
@@ -62,12 +64,20 @@ export function computePowerDistributionAfterSolarAndBattery(params: {
   getEntityStateWatts: ComputeEntityStateWatts;
   getEntityState: ComputeEntityState;
 }): void {
-  const { entities, grid, solar, battery, nonFossil, getEntityStateWatts, getEntityState } = params;
+  const { rvMode = false, entities, grid, solar, battery, nonFossil, getEntityStateWatts, getEntityState } = params;
+  
+  if (rvMode) {
+    computeRvPowerDistribution(params);
+    return;
+} 
 
   if (solar.has) {
     solar.state.toHome =
-      (solar.state.total ?? 0) - (grid.state.toGrid ?? 0) - (battery.state.toBattery ?? 0);
+      (solar.state.total ?? 0) -
+      (grid.state.toGrid ?? 0) -
+      (battery.state.toBattery ?? 0);
   }
+
 
   const largestGridBatteryTolerance = Math.max(
     entities.grid?.display_zero_tolerance ?? 0,
