@@ -556,6 +556,7 @@ export class PowerFlowCardPlus extends LitElement {
     const rvMode = this._config.main_config?.rv_mode ?? false;
     const rv = this._config.rv;
     const initialNumericState = null as null | number;
+    // RV runtime container. The values are filled in subsequent RV commits.
     const rvData = {
       shorePower: {},
       houseBattery: {},
@@ -568,7 +569,6 @@ export class PowerFlowCardPlus extends LitElement {
     };
 
     void rvMode;
-    void rv;
     void rvData;
 
     const grid: GridObject = {
