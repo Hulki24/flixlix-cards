@@ -56,6 +56,7 @@ type NonFossil = {
 
 export function computePowerDistributionAfterSolarAndBattery(params: {
   rvMode?: boolean;
+  rv?: any;
   entities: ToleranceConfig;
   grid: PowerGrid;
   solar: PowerSolar;
@@ -64,7 +65,19 @@ export function computePowerDistributionAfterSolarAndBattery(params: {
   getEntityStateWatts: ComputeEntityStateWatts;
   getEntityState: ComputeEntityState;
 }): void {
-  const { rvMode = false, entities, grid, solar, battery, nonFossil, getEntityStateWatts, getEntityState } = params;
+  const {
+    rvMode = false,
+    rv,
+    entities,
+    grid,
+    solar,
+    battery,
+    nonFossil,
+    getEntityStateWatts,
+    getEntityState,
+  } = params;
+
+  void rv;
   
   if (rvMode) {
     computeRvPowerDistribution(params);
