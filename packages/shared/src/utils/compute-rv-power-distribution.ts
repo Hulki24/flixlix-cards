@@ -36,9 +36,10 @@ export function computeRvPowerDistribution(params: {
   const inverterPower = Math.max(getEntityStateWatts(rv?.inverter) ?? 0, 0);
 
   const batteryToDc = dcLoad;
-  const batteryToInverter = inverterPower;
+const batteryToInverter = inverterPower;
+const inverterToAc = batteryToInverter;
 
-  battery.state.toHome = batteryToDc + batteryToInverter;
+battery.state.toHome = batteryToDc + inverterToAc;
   grid.state.toHome = shorePower > 0 ? acLoad : 0;
   grid.state.toBattery = shorePower > 0
     ? Math.max(grid.state.fromGrid ?? 0, 0)
