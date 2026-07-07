@@ -28,6 +28,9 @@ export const flowSolarToHome = (
   config: FlowCardPlusConfig,
   { battery, grid, individual, solar, newDur }: Flows
 ) => {
+  if (config.main_config?.rv_mode) {
+    return nothing;
+  }
   const shouldShow =
     solar.has && showLine(config, solar.state.toHome || 0) && !config.entities.home?.hide;
   if (!shouldShow) return nothing;
