@@ -140,7 +140,7 @@ export interface RvConfig {
   dc_load?: RvEntity;
   ac_load?: RvEntity;
   inverter?: RvEntity;
-  orion?: RvEntity;
+  booster?: RvEntity;
 }
 interface FossilFuelPercentage extends BaseConfigEntity {
   entity: string;
