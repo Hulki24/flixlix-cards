@@ -4,6 +4,8 @@ import type {
 } from "./compute-power-distribution";
 
 export function computeRvPowerDistribution(params: {
+  rvMode?: boolean;
+  rv?: any;
   entities: any;
   grid: any;
   solar: any;
@@ -12,10 +14,7 @@ export function computeRvPowerDistribution(params: {
   getEntityStateWatts: ComputeEntityStateWatts;
   getEntityState: ComputeEntityState;
 }): void {
-  const { rv, grid, solar, battery } = params;
-
-  // RV-003 Vorbereitung
-  void rv;
+  const { rv, grid, solar, battery, getEntityStateWatts } = params;
 
   //
   // Wohnmobil: Keine Rückspeisung
@@ -29,35 +28,41 @@ export function computeRvPowerDistribution(params: {
   //
   solar.state.toBattery = Math.max(solar.state.total ?? 0, 0);
 
-  // RV-120: Wohnmobil-Lasten
+  //
+  // RV-Verbraucher
+  //
   const shorePower = Math.max(getEntityStateWatts(rv?.shore_power) ?? 0, 0);
   const acLoad = Math.max(getEntityStateWatts(rv?.ac_load) ?? 0, 0);
   const dcLoad = Math.max(getEntityStateWatts(rv?.dc_load) ?? 0, 0);
   const inverterPower = Math.max(getEntityStateWatts(rv?.inverter) ?? 0, 0);
+  const boosterPower = Math.max(getEntityStateWatts(rv?.booster) ?? 0, 0);
 
-const orionPower = Math.max(
-  getEntityStateWatts(rv?.orion) ?? 0,
-  0,
-);
+  //
+  // Wechselrichter wird als DC-Verbraucher behandelt
+  //
+  battery.state.toHome = dcLoad + inverterPower;
 
-
-  const batteryToDc = dcLoad;
-const batteryToInverter = inverterPower;
-const inverterToAc = batteryToInverter;
-
-battery.state.toHome = batteryToDc + inverterToAc;
+  //
+  // AC-Verbraucher werden direkt aus Landstrom versorgt
+  //
   grid.state.toHome = shorePower > 0 ? acLoad : 0;
-  grid.state.toBattery = (shorePower > 0 ? Math.max(grid.state.fromGrid ?? 0, 0) : 0) + orionPower;
-
-  solar.state.toHome = 0;
 
   //
   // Landstrom lädt die Aufbaubatterie
+  // (Booster wird später in der vollständigen RV-Logik berücksichtigt)
   //
-  grid.state.toBattery = Math.max(grid.state.fromGrid ?? 0, 0);
+  grid.state.toBattery = shorePower > 0
+    ? Math.max(grid.state.fromGrid ?? 0, 0)
+    : 0;
 
   //
-  // Verbraucher bleiben in Schritt 1 unverändert.
-  // Die komplette Verteilungslogik folgt in Schritt 2.
+  // Solar versorgt im RV-Modus niemals direkt den RV-Knoten
   //
+  solar.state.toHome = 0;
+
+  //
+  // Booster wird in einem späteren Schritt
+  // in die vollständige Ladeflusslogik integriert.
+  //
+  void boosterPower;
 }
