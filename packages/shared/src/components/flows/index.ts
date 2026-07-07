@@ -7,6 +7,8 @@ import { flowGridToHome } from "./grid-to-home";
 import { flowSolarToGrid } from "./solar-to-grid";
 import { flowSolarToHome } from "./solar-to-home";
 import { flowSolarToBattery } from "./solart-to-battery";
+import { flowShoreToAc } from "./rv/shore-to-ac";
+import { flowShoreToHouseBattery } from "./rv/shore-to-house-battery";
 
 export interface Flows {
   battery: any;
@@ -20,7 +22,19 @@ export const flowElement = (
   config: FlowCardPlusConfig,
   { battery, grid, individual, solar, newDur }: Flows
 ) => {
+  const rvMode = config.main_config?.rv_mode === true;
+
+  if (rvMode) {
+    return html`
+      ${flowShoreToAc(config, { battery, grid, individual, solar, newDur })}
+      ${flowShoreToHouseBattery(config, { battery, grid, individual, solar, newDur })}
+      ${flowSolarToBattery(config, { battery, individual, solar, newDur })}
+      ${flowBatteryToHome(config, { battery, grid, individual, newDur })}
+    `;
+  }
+
   return html`
+
   ${flowSolarToHome(config, { battery, grid, individual, solar, newDur })}
   ${flowSolarToGrid(config, { battery, grid, individual, solar, newDur })}
   ${flowSolarToBattery(config, { battery, individual, solar, newDur })}
