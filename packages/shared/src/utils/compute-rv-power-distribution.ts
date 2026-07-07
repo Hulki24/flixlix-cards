@@ -35,15 +35,19 @@ export function computeRvPowerDistribution(params: {
   const dcLoad = Math.max(getEntityStateWatts(rv?.dc_load) ?? 0, 0);
   const inverterPower = Math.max(getEntityStateWatts(rv?.inverter) ?? 0, 0);
 
+const orionPower = Math.max(
+  getEntityStateWatts(rv?.orion) ?? 0,
+  0,
+);
+
+
   const batteryToDc = dcLoad;
 const batteryToInverter = inverterPower;
 const inverterToAc = batteryToInverter;
 
 battery.state.toHome = batteryToDc + inverterToAc;
   grid.state.toHome = shorePower > 0 ? acLoad : 0;
-  grid.state.toBattery = shorePower > 0
-    ? Math.max(grid.state.fromGrid ?? 0, 0)
-    : 0;
+  grid.state.toBattery = (shorePower > 0 ? Math.max(grid.state.fromGrid ?? 0, 0) : 0) + orionPower;
 
   solar.state.toHome = 0;
 
