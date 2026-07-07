@@ -140,7 +140,8 @@ export const homeElement = (
       </div>
       ${!showHomeLabel
         ? html`<span class="label"></span>`
-        : html`<span class="label">${home.name}</span>`}
+        : html`<span class="label">
+          ${config.main_config?.rv_mode ? "RV" : home.name}</span>`}
     </div>
   `;
 };
