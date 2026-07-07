@@ -192,6 +192,7 @@ export const gridElement = (
         ? html`<span class="grid power-outage">${grid.powerOutage.name}</span>`
         : nothing}
     </div>
-    <span class="label">${grid.name}</span>
+    <span class="label">
+      ${config.main_config?.rv_mode ? "Shore Power" : grid.name}</span>
   </div>`;
 };
