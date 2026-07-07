@@ -229,6 +229,7 @@ export const batteryElement = (
           >`
         : nothing}
     </div>
-    <span class="label">${battery.name}</span>
+    <span class="label">
+      ${config.main_config?.rv_mode ? "Cabin Battery" : battery.name}</span>
   </div>`;
 };
