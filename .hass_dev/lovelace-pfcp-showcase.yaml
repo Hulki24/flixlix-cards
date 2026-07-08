@@ -34,6 +34,79 @@ views:
       - type: grid
         cards:
           - type: heading
+            heading: RV Mode Demo
+            heading_style: title
+            icon: mdi:rv-truck
+          - type: custom:power-flow-card-plus
+            rv_mode: true
+            entities:
+              grid:
+                entity: input_number.rv_shore_power
+                name: Shore
+                icon: mdi:power-plug
+              solar:
+                entity: input_number.solar_power
+              battery:
+                entity:
+                  consumption: input_number.battery_power_import
+                  production: input_number.battery_power_export
+                state_of_charge: input_number.battery_soc
+                name: House Battery
+                icon: mdi:battery-high
+              home:
+                entity: input_number.washing_machine_power
+                name: RV Loads
+                icon: mdi:rv-truck
+              individual:
+                - entity: input_number.washing_machine_power
+                  name: AC Load
+                  icon: mdi:power-socket-eu
+                - entity: input_number.fridge_power
+                  name: DC Load
+                  icon: mdi:current-dc
+                - entity: input_number.rv_inverter_power
+                  name: Inverter
+                  icon: mdi:sine-wave
+                - entity: input_number.rv_booster_power
+                  name: Booster
+                  icon: mdi:battery-arrow-up
+            rv:
+              shore_power:
+                entity: input_number.rv_shore_power
+              house_battery:
+                charge: input_number.battery_power_import
+                discharge: input_number.battery_power_export
+                soc: input_number.battery_soc
+              starter_battery:
+                voltage: input_number.rv_starter_battery_voltage
+                current: input_number.rv_starter_battery_current
+                power: input_number.rv_starter_battery_power
+              solar:
+                entity: input_number.solar_power
+              ac_load:
+                entity: input_number.washing_machine_power
+              dc_load:
+                entity: input_number.fridge_power
+              inverter:
+                entity: input_number.rv_inverter_power
+              # Booster is represented by the current RV config key `orion`.
+              orion:
+                entity: input_number.rv_booster_power
+            clickable_entities: true
+            display_zero_lines: true
+            use_new_flow_rate_model: true
+            base_decimals: 0
+            kilo_decimals: 1
+            min_flow_rate: 0.75
+            max_flow_rate: 6
+            max_expected_power: 2000
+            min_expected_power: 0.01
+            kilo_threshold: 1000
+            transparency_zero_lines: 0
+            sort_individual_devices: false
+      - type: grid
+        cards:
+          - type: heading
             heading: Grid Only
             heading_style: title
             icon: mdi:transmission-tower

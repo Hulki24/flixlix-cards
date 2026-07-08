@@ -17,6 +17,12 @@ input_number:
     min: 0
     max: 100
     step: 0.5
+  rv_shore_power:
+    name: RV Shore Power
+    initial: 45
+    min: 0
+    max: 100
+    step: 0.5
   battery_soc:
     name: Battery State of Charge
     initial: 67
@@ -44,6 +50,36 @@ input_number:
   solar_power:
     name: Solar Power
     initial: 100
+    min: 0
+    max: 100
+    step: 0.5
+  rv_starter_battery_voltage:
+    name: RV Starter Battery Voltage
+    initial: 12.7
+    min: 0
+    max: 16
+    step: 0.1
+  rv_starter_battery_current:
+    name: RV Starter Battery Current
+    initial: 4
+    min: -100
+    max: 100
+    step: 0.5
+  rv_starter_battery_power:
+    name: RV Starter Battery Power
+    initial: 50
+    min: -1000
+    max: 1000
+    step: 1
+  rv_inverter_power:
+    name: RV Inverter Power
+    initial: 25
+    min: 0
+    max: 100
+    step: 0.5
+  rv_booster_power:
+    name: RV Booster Power
+    initial: 15
     min: 0
     max: 100
     step: 0.5
