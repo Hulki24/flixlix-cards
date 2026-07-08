@@ -12,10 +12,9 @@ export function computeRvPowerDistribution(params: {
   getEntityStateWatts: ComputeEntityStateWatts;
   getEntityState: ComputeEntityState;
 }): void {
-  const { rv, grid, solar, battery } = params;
+  const { grid, solar, battery } = params;
 
   // RV-003 Vorbereitung
-  void rv;
 
   //
   // Wohnmobil: Keine Rückspeisung

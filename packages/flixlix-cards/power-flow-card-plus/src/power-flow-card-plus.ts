@@ -49,6 +49,7 @@ import {
   type HomeSources,
   type NewDur,
   type PowerFlowCardPlusConfig,
+  type RvConfig,
   type TemplatesObj,
 } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
@@ -89,6 +90,31 @@ registerCustomCard({
   version: packageJson.version,
 });
 
+type RvRuntimeEntity = {
+  entity?: string;
+  has: boolean;
+  state: number | null;
+};
+
+type RvRuntimeData = {
+  shorePower: RvRuntimeEntity;
+  houseBattery: {
+    charge: RvRuntimeEntity;
+    discharge: RvRuntimeEntity;
+    soc: RvRuntimeEntity;
+  };
+  starterBattery: {
+    voltage: RvRuntimeEntity;
+    current: RvRuntimeEntity;
+    power: RvRuntimeEntity;
+  };
+  solar: RvRuntimeEntity;
+  acLoad: RvRuntimeEntity;
+  dcLoad: RvRuntimeEntity;
+  inverter: RvRuntimeEntity;
+  orion: RvRuntimeEntity;
+};
+
 @customElement("power-flow-card-plus")
 export class PowerFlowCardPlus extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -118,6 +144,7 @@ export class PowerFlowCardPlus extends LitElement {
         solar: any;
         battery: any;
         home: any;
+        rvData: RvRuntimeData;
         nonFossil: any;
         individualObjs: IndividualObject[];
         newDur: NewDur;
@@ -551,25 +578,51 @@ export class PowerFlowCardPlus extends LitElement {
     }
   }
 
+  private _computeRvData(
+    rv: RvConfig | undefined,
+    getPowerEntity: (entity?: string) => RvRuntimeEntity,
+    getNumericEntity: (entity?: string) => RvRuntimeEntity
+  ): RvRuntimeData {
+    return {
+      shorePower: getPowerEntity(rv?.shore_power?.entity),
+      houseBattery: {
+        charge: getPowerEntity(rv?.house_battery?.charge),
+        discharge: getPowerEntity(rv?.house_battery?.discharge),
+        soc: getNumericEntity(rv?.house_battery?.soc),
+      },
+      starterBattery: {
+        voltage: getNumericEntity(rv?.starter_battery?.voltage),
+        current: getNumericEntity(rv?.starter_battery?.current),
+        power: getPowerEntity(rv?.starter_battery?.power),
+      },
+      solar: getPowerEntity(rv?.solar?.entity),
+      acLoad: getPowerEntity(rv?.ac_load?.entity),
+      dcLoad: getPowerEntity(rv?.dc_load?.entity),
+      inverter: getPowerEntity(rv?.inverter?.entity),
+      orion: getPowerEntity(rv?.orion?.entity),
+    };
+  }
+
   private _computeRenderData() {
     const { entities } = this._config;
-    const rvMode = this._config.main_config?.rv_mode ?? false;
+    const rvMode = this._config.rv_mode ?? false;
     const rv = this._config.rv;
     const initialNumericState = null as null | number;
-    const rvData = {
-      shorePower: {},
-      houseBattery: {},
-      starterBattery: {},
-      solar: {},
-      acLoad: {},
-      dcLoad: {},
-      inverter: {},
-      orion: {},
-    };
-
-    void rvMode;
-    void rv;
-    void rvData;
+    const getRvPowerEntity = (entity?: string): RvRuntimeEntity => ({
+      entity,
+      has: entity !== undefined,
+      state: entity ? getEntityStateWatts(this.hass, entity) : initialNumericState,
+    });
+    const getRvNumericEntity = (entity?: string): RvRuntimeEntity => ({
+      entity,
+      has: entity !== undefined,
+      state: entity ? getEntityState(this.hass, entity) : initialNumericState,
+    });
+    const rvData: RvRuntimeData = this._computeRvData(
+      rv,
+      getRvPowerEntity,
+      getRvNumericEntity
+    );
 
     const grid: GridObject = {
       entity: entities.grid?.entity,
@@ -820,7 +873,6 @@ export class PowerFlowCardPlus extends LitElement {
     }
     computePowerDistributionAfterSolarAndBattery({
       rvMode,
-      rv,
       entities: {
         grid: entities.grid,
         battery: entities.battery,
@@ -1062,6 +1114,7 @@ export class PowerFlowCardPlus extends LitElement {
       grid,
       solar,
       battery,
+      rvData,
       home,
       nonFossil,
       individualObjs: visibleIndividualObjects,
