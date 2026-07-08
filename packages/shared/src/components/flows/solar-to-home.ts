@@ -28,7 +28,7 @@ export const flowSolarToHome = (
   config: FlowCardPlusConfig,
   { battery, grid, individual, solar, newDur }: Flows
 ) => {
-  if (config.main_config?.rv_mode) {
+  if (config.rv_mode) {
     return nothing;
   }
   const shouldShow =

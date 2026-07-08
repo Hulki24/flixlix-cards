@@ -52,7 +52,7 @@ export const flowBatteryToGrid = (
   config: FlowCardPlusConfig,
   { battery, grid, individual, newDur }: FlowBatteryToGridFlows
 ) => {
-  if (config.main_config?.rv_mode) {
+  if (config.rv_mode) {
     return nothing;
   }
 

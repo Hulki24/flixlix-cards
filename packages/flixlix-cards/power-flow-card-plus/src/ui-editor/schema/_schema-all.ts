@@ -37,6 +37,7 @@ export const cardConfigStruct = assign(
     min_expected_power: optional(number()),
     max_expected_power: optional(number()),
     kilo_threshold: optional(number()),
+    rv_mode: optional(boolean()),
     clickable_entities: optional(boolean()),
     transparency_zero_lines: optional(number()),
     greyout_zero_lines: optional(boolean()),
@@ -201,6 +202,12 @@ export const advancedOptionsSchema = memoizeOne((localize, displayZeroLinesMode:
         name: "mega_threshold",
         label: "Megawatt Threshold",
         selector: { number: { mode: "box", min: 0, max: 10000000, step: 1 } },
+      },
+      {
+        name: "rv_mode",
+        label: "RV Mode",
+        selector: { boolean: {} },
+        default: false,
       },
       {
         name: "clickable_entities",

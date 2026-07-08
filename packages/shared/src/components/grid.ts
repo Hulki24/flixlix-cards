@@ -193,6 +193,6 @@ export const gridElement = (
         : nothing}
     </div>
     <span class="label">
-      ${config.main_config?.rv_mode ? "Shore Power" : grid.name}</span>
+      ${config.rv_mode ? "Shore Power" : grid.name}</span>
   </div>`;
 };

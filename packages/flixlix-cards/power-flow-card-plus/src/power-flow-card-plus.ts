@@ -1,4 +1,5 @@
 import { batteryElement } from "@flixlix-cards/shared/components/battery";
+import { starterBatteryElement } from "@flixlix-cards/shared/components/starter-battery";
 import { flowElement } from "@flixlix-cards/shared/components/flows/index";
 import { gridElement } from "@flixlix-cards/shared/components/grid";
 import { homeElement } from "@flixlix-cards/shared/components/home";
@@ -468,6 +469,25 @@ export class PowerFlowCardPlus extends LitElement {
               : spacer}
             ${checkHasRightIndividual(individualObjs) ? spacer : nothing}
           </div>
+          ${this._config.main_config?.rv_mode
+            ? html`
+              <div class="row">
+                ${spacer}
+
+                ${starterBatteryElement(this, this._config, {
+                  starterBattery: {
+                    icon: "mdi:car-battery",
+                    voltage: 13.8,
+                    current: null,
+                    power: null,
+                  },
+                })}
+
+                ${spacer}
+            </div>
+    `
+            : nothing}
+          
           ${battery.has || checkHasBottomIndividual(individualObjs)
             ? html`<div class="row">
                 ${spacer}
@@ -565,10 +585,10 @@ export class PowerFlowCardPlus extends LitElement {
       acLoad: {},
       dcLoad: {},
       inverter: {},
-      orion: {},
+      booster: {},
     };
 
-    void rvMode;
+    // RV runtime data will be populated in subsequent commits.
     void rvData;
 
     const grid: GridObject = {
