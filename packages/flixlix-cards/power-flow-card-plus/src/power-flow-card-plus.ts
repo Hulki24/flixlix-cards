@@ -406,7 +406,8 @@ export class PowerFlowCardPlus extends LitElement {
       individualFieldRightTop,
       individualFieldRightBottom,
     } = data;
-    const showRvBuildMarker = this._isRvModeEnabled();
+    const rvMode = this._isRvModeEnabled();
+    const showRvBuildMarker = rvMode;
     const getIndividualDisplayState = (field?: IndividualObject) => {
       if (!field) return "";
       if (field?.state === undefined) return "";
@@ -478,7 +479,7 @@ export class PowerFlowCardPlus extends LitElement {
               </div>`
             : nothing}
           <div class="row">
-            ${grid.has
+            ${grid.has || rvMode
               ? gridElement(this, this._config, {
                   entities,
                   grid,
@@ -613,11 +614,10 @@ export class PowerFlowCardPlus extends LitElement {
   }
 
   private _isRvModeEnabled(): boolean {
-    const mainConfig = (this._config as PowerFlowCardPlusConfig & {
-      main_config?: { rv_mode?: boolean };
-    }).main_config;
+    const rvMode =
+      (this._config as any).rv_mode === true || (this._config as any).main_config?.rv_mode === true;
 
-    return this._config.rv_mode === true || mainConfig?.rv_mode === true;
+    return rvMode;
   }
 
   private _getEntityId(
