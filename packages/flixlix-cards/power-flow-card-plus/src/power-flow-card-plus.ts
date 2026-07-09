@@ -406,6 +406,7 @@ export class PowerFlowCardPlus extends LitElement {
       individualFieldRightTop,
       individualFieldRightBottom,
     } = data;
+    const showRvBuildMarker = this._isRvModeEnabled();
     const getIndividualDisplayState = (field?: IndividualObject) => {
       if (!field) return "";
       if (field?.state === undefined) return "";
@@ -422,6 +423,13 @@ export class PowerFlowCardPlus extends LitElement {
         class=${this._config.full_size ? "full-size" : ""}
         style=${this._config.style_ha_card ? this._config.style_ha_card : ""}
       >
+        ${showRvBuildMarker
+          ? html`<div
+              style="margin: 8px 16px 0; padding: 8px 10px; background: #ffeb3b; color: #111; font-weight: 800; text-align: center; border: 2px solid #111;"
+            >
+              RV BUILD ACTIVE 69f0579
+            </div>`
+          : nothing}
         <div
           class="card-content ${this._config.full_size ? "full-size" : ""} ${this._config.no_labels
             ? "no-labels"
