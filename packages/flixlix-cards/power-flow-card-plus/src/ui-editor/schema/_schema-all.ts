@@ -41,6 +41,7 @@ export const cardConfigStruct = assign(
     transparency_zero_lines: optional(number()),
     greyout_zero_lines: optional(boolean()),
     display_zero_lines: optional(any()),
+    rv_mode: optional(boolean()),
     use_new_flow_rate_model: optional(boolean()),
     full_size: optional(boolean()),
     style_ha_card: optional(any()),
