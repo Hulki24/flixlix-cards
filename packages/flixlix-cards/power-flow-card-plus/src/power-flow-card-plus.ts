@@ -45,6 +45,7 @@ import { getEntityStateWatts } from "@flixlix-cards/shared/states/utils/get-enti
 import { allDynamicStyles, styles } from "@flixlix-cards/shared/style";
 import {
   type ActionConfigSet,
+  type ComboEntity,
   type GridObject,
   type HomeSources,
   type NewDur,
@@ -603,10 +604,56 @@ export class PowerFlowCardPlus extends LitElement {
     };
   }
 
+  private _isRvModeEnabled(): boolean {
+    const mainConfig = (this._config as PowerFlowCardPlusConfig & {
+      main_config?: { rv_mode?: boolean };
+    }).main_config;
+
+    return this._config.rv_mode === true || mainConfig?.rv_mode === true;
+  }
+
+  private _getEntityId(
+    entity: string | ComboEntity | undefined,
+    direction: "consumption" | "production" | "any" = "any"
+  ): string | undefined {
+    if (typeof entity === "string") return entity;
+    if (!entity) return undefined;
+    if (direction === "consumption") return entity.consumption;
+    if (direction === "production") return entity.production;
+    return entity.consumption || entity.production;
+  }
+
+  private _getRvConfigWithFallback(rvMode: boolean): RvConfig | undefined {
+    if (this._config.rv || !rvMode) return this._config.rv;
+
+    const { entities } = this._config;
+    const starterBattery = entities.individual?.[0]?.entity;
+
+    return {
+      shore_power: {
+        entity: this._getEntityId(entities.grid?.entity, "consumption"),
+      },
+      house_battery: {
+        charge: this._getEntityId(entities.battery?.entity, "consumption"),
+        discharge: this._getEntityId(entities.battery?.entity, "production"),
+        soc: entities.battery?.state_of_charge,
+      },
+      solar: {
+        entity: this._getEntityId(entities.solar?.entity),
+      },
+      ac_load: {
+        entity: this._getEntityId(entities.home?.entity),
+      },
+      starter_battery: {
+        power: starterBattery,
+      },
+    };
+  }
+
   private _computeRenderData() {
     const { entities } = this._config;
-    const rvMode = this._config.rv_mode ?? false;
-    const rv = this._config.rv;
+    const rvMode = this._isRvModeEnabled();
+    const rv = this._getRvConfigWithFallback(rvMode);
     const initialNumericState = null as null | number;
     const getRvPowerEntity = (entity?: string): RvRuntimeEntity => ({
       entity,
