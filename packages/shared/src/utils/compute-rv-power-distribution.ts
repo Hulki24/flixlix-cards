@@ -14,15 +14,13 @@ export function computeRvPowerDistribution(params: {
 }): void {
   const { grid, solar, battery } = params;
 
-  const shorePower = Math.max(grid.state.fromGrid ?? 0, 0);
+  const shoreTotal = Math.max(grid.state.fromGrid ?? 0, 0);
   const solarPower = Math.max(solar.state.total ?? 0, 0);
-  const houseBatteryCharge = Math.max(battery.state.toBattery ?? 0, 0);
+  const shoreToBattery = Math.max(battery.state.toBattery ?? 0, 0);
   const houseBatteryDischarge = Math.max(battery.state.fromBattery ?? 0, 0);
 
   const solarToHouseBattery = solarPower;
-  const remainingChargeAfterSolar = Math.max(houseBatteryCharge - solarToHouseBattery, 0);
-  const shoreToHouseBattery = Math.min(shorePower, remainingChargeAfterSolar);
-  const shoreToAcLoads = Math.max(shorePower - shoreToHouseBattery, 0);
+  const acConsumption = Math.max(shoreTotal - shoreToBattery, 0);
 
   // RV systems never feed power back to shore/grid.
   grid.state.toGrid = 0;
@@ -33,9 +31,9 @@ export function computeRvPowerDistribution(params: {
   solar.state.toBattery = solarToHouseBattery;
   solar.state.toHome = 0;
 
-  // Shore power covers available house-battery charging and then AC loads directly.
-  grid.state.toBattery = shoreToHouseBattery;
-  grid.state.toHome = shoreToAcLoads;
+  // Derive AC consumption from shore power because RV mode has no separate AC load sensor.
+  grid.state.toBattery = Math.min(shoreToBattery, shoreTotal);
+  grid.state.toHome = acConsumption;
 
   // DC loads always come from the house battery. Without shore, AC loads do too via inverter.
   battery.state.toHome = houseBatteryDischarge;
