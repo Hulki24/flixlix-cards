@@ -68,6 +68,14 @@ export function computePowerDistributionAfterSolarAndBattery(params: {
   
   if (rvMode) {
     computeRvPowerDistribution(params);
+    console.log("RV Distribution", {
+      shoreToHome: grid.state.toHome,
+      shoreToBattery: grid.state.toBattery,
+      batteryToHome: battery.state.toHome,
+      batteryCharge: battery.state.toBattery,
+      solarToBattery: solar.state.toBattery,
+      solarToHome: solar.state.toHome,
+    });
     return;
 } 
 
