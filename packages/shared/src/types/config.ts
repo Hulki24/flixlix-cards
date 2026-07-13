@@ -10,10 +10,13 @@ import {
 export type DisplayZeroLinesMode = "show" | "grey_out" | "transparency" | "hide" | "custom";
 
 interface mainConfigOptions {
-    /**
+  /**
    * Enables RV / Camper power flow logic.
    */
   rv_mode?: boolean;
+  main_config?: {
+    rv_mode?: boolean;
+  };
   dashboard_link?: string;
   dashboard_link_label?: string;
   second_dashboard_link?: string;

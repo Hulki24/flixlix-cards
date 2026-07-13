@@ -47,6 +47,7 @@ function makeCard(config: PowerFlowCardPlusConfig, hass: ReturnType<typeof makeH
 declare function computeRenderDataShape(): {
   grid: {
     has: boolean;
+    name: string;
     state: {
       fromGrid: number | null;
       toGrid: number | null;
@@ -56,6 +57,7 @@ declare function computeRenderDataShape(): {
   };
   solar: {
     has: boolean;
+    name: string;
     state: {
       total: number | null;
       toHome: number | null;
@@ -65,6 +67,7 @@ declare function computeRenderDataShape(): {
   };
   battery: {
     has: boolean | string;
+    name: string;
     state: {
       fromBattery: number | null;
       toBattery: number | null;
@@ -72,6 +75,7 @@ declare function computeRenderDataShape(): {
       toHome: number | null;
     };
   };
+  home: { name: string };
   individualObjs: Array<{ has: boolean; state: number | null }>;
 };
 
@@ -94,6 +98,42 @@ describe("render", () => {
 });
 
 describe("_computeRenderData", () => {
+  test("nested RV mode uses classic entities, preserves configured names, and derives shore flows", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      main_config: { rv_mode: true },
+      entities: {
+        grid: { entity: "sensor.shore", name: "Configured Shore" },
+        solar: { entity: "sensor.solar", name: "Configured Solar" },
+        battery: {
+          entity: {
+            consumption: "sensor.battery_discharge",
+            production: "sensor.battery_charge",
+          },
+          name: "Configured House Battery",
+        },
+        home: { entity: "sensor.loads", name: "Configured RV Loads" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const hass = makeHass({
+      "sensor.shore": "500",
+      "sensor.solar": "100",
+      "sensor.battery_charge": "200",
+      "sensor.battery_discharge": "0",
+      "sensor.loads": "300",
+    });
+    const data = makeCard(config, hass)._computeRenderData();
+
+    expect(data.grid.state.toHome).toBe(300);
+    expect(data.grid.state.toBattery).toBe(200);
+    expect(data.solar.state.toBattery).toBe(100);
+    expect(data.solar.state.toHome).toBe(0);
+    expect(data.grid.name).toBe("Configured Shore");
+    expect(data.solar.name).toBe("Configured Solar");
+    expect(data.battery.name).toBe("Configured House Battery");
+    expect(data.home.name).toBe("Configured RV Loads");
+  });
+
   test("case 1: grid-only consumption — fromGrid is the entity value and toHome follows", () => {
     const config = {
       type: "custom:power-flow-card-plus",

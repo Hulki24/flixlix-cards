@@ -606,10 +606,7 @@ export class PowerFlowCardPlus extends LitElement {
   }
 
   private _isRvModeEnabled(): boolean {
-    const rvMode =
-      (this._config as any).rv_mode === true || (this._config as any).main_config?.rv_mode === true;
-
-    return rvMode;
+    return this._config.rv_mode === true || this._config.main_config?.rv_mode === true;
   }
 
   private _getEntityId(
