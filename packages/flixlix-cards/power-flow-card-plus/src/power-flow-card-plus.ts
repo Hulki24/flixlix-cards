@@ -145,6 +145,7 @@ export class PowerFlowCardPlus extends LitElement {
         solar: any;
         battery: any;
         home: any;
+        rvMode: boolean;
         rvData: RvRuntimeData;
         nonFossil: any;
         individualObjs: IndividualObject[];
@@ -405,8 +406,8 @@ export class PowerFlowCardPlus extends LitElement {
       individualFieldLeftBottom,
       individualFieldRightTop,
       individualFieldRightBottom,
+      rvMode,
     } = data;
-    const rvMode = this._isRvModeEnabled();
     const getIndividualDisplayState = (field?: IndividualObject) => {
       if (!field) return "";
       if (field?.state === undefined) return "";
@@ -519,13 +520,17 @@ export class PowerFlowCardPlus extends LitElement {
                   : nothing}
               </div>`
             : spacer}
-          ${flowElement(this._config, {
-            battery,
-            grid,
-            individual: individualObjs,
-            newDur,
-            solar,
-          })}
+          ${flowElement(
+            this._config,
+            {
+              battery,
+              grid,
+              individual: individualObjs,
+              newDur,
+              solar,
+            },
+            rvMode
+          )}
         </div>
         ${dashboardLinkElement(this._config, this.hass)}
       </ha-card>
@@ -1158,6 +1163,7 @@ export class PowerFlowCardPlus extends LitElement {
       grid,
       solar,
       battery,
+      rvMode,
       rvData,
       home,
       nonFossil,

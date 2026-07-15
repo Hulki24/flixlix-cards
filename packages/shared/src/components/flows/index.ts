@@ -18,10 +18,11 @@ export interface Flows {
 
 export const flowElement = (
   config: FlowCardPlusConfig,
-  { battery, grid, individual, solar, newDur }: Flows
+  { battery, grid, individual, solar, newDur }: Flows,
+  rvMode = config.rv_mode === true || config.main_config?.rv_mode === true
 ) => {
   return html`
-  ${flowSolarToHome(config, { battery, grid, individual, solar, newDur })}
+  ${flowSolarToHome(config, { battery, grid, individual, solar, newDur }, rvMode)}
   ${flowSolarToGrid(config, { battery, grid, individual, solar, newDur })}
   ${flowSolarToBattery(config, { battery, individual, solar, newDur })}
   ${flowGridToHome(config, { battery, grid, individual, solar, newDur })}

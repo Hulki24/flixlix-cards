@@ -76,6 +76,7 @@ declare function computeRenderDataShape(): {
     };
   };
   home: { name: string };
+  rvMode: boolean;
   individualObjs: Array<{ has: boolean; state: number | null }>;
 };
 
@@ -98,41 +99,45 @@ describe("render", () => {
 });
 
 describe("_computeRenderData", () => {
-  test("nested RV mode uses classic entities, preserves configured names, and derives shore flows", () => {
-    const config = {
-      type: "custom:power-flow-card-plus",
-      main_config: { rv_mode: true },
-      entities: {
-        grid: { entity: "sensor.shore", name: "Configured Shore" },
-        solar: { entity: "sensor.solar", name: "Configured Solar" },
-        battery: {
-          entity: {
-            consumption: "sensor.battery_discharge",
-            production: "sensor.battery_charge",
+  test.each([{ rv_mode: true }, { main_config: { rv_mode: true } }])(
+    "RV mode uses classic entities, preserves configured names, and derives shore flows",
+    (modeConfig) => {
+      const config = {
+        type: "custom:power-flow-card-plus",
+        ...modeConfig,
+        entities: {
+          grid: { entity: "sensor.shore", name: "Configured Shore" },
+          solar: { entity: "sensor.solar", name: "Configured Solar" },
+          battery: {
+            entity: {
+              consumption: "sensor.battery_discharge",
+              production: "sensor.battery_charge",
+            },
+            name: "Configured House Battery",
           },
-          name: "Configured House Battery",
+          home: { entity: "sensor.loads", name: "Configured RV Loads" },
         },
-        home: { entity: "sensor.loads", name: "Configured RV Loads" },
-      },
-    } as PowerFlowCardPlusConfig;
-    const hass = makeHass({
-      "sensor.shore": "500",
-      "sensor.solar": "100",
-      "sensor.battery_charge": "200",
-      "sensor.battery_discharge": "0",
-      "sensor.loads": "300",
-    });
-    const data = makeCard(config, hass)._computeRenderData();
+      } as PowerFlowCardPlusConfig;
+      const hass = makeHass({
+        "sensor.shore": "500",
+        "sensor.solar": "100",
+        "sensor.battery_charge": "200",
+        "sensor.battery_discharge": "0",
+        "sensor.loads": "300",
+      });
+      const data = makeCard(config, hass)._computeRenderData();
 
-    expect(data.grid.state.toHome).toBe(300);
-    expect(data.grid.state.toBattery).toBe(200);
-    expect(data.solar.state.toBattery).toBe(100);
-    expect(data.solar.state.toHome).toBe(0);
-    expect(data.grid.name).toBe("Configured Shore");
-    expect(data.solar.name).toBe("Configured Solar");
-    expect(data.battery.name).toBe("Configured House Battery");
-    expect(data.home.name).toBe("Configured RV Loads");
-  });
+      expect(data.rvMode).toBe(true);
+      expect(data.grid.state.toHome).toBe(300);
+      expect(data.grid.state.toBattery).toBe(200);
+      expect(data.solar.state.toBattery).toBe(100);
+      expect(data.solar.state.toHome).toBe(0);
+      expect(data.grid.name).toBe("Configured Shore");
+      expect(data.solar.name).toBe("Configured Solar");
+      expect(data.battery.name).toBe("Configured House Battery");
+      expect(data.home.name).toBe("Configured RV Loads");
+    }
+  );
 
   test("case 1: grid-only consumption — fromGrid is the entity value and toHome follows", () => {
     const config = {
