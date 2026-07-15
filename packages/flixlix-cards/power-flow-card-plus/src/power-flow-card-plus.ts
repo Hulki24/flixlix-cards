@@ -932,6 +932,13 @@ export class PowerFlowCardPlus extends LitElement {
       battery.state.toGrid = 0;
       battery.state.toHome = 0;
     }
+    if (rvMode) {
+      const configuredHomeConsumption =
+        typeof entities.home?.entity === "string"
+          ? getEntityStateWatts(this.hass, entities.home.entity)
+          : 0;
+      battery.state.toHome = Math.max(rvData.acLoad.state ?? configuredHomeConsumption, 0);
+    }
     computePowerDistributionAfterSolarAndBattery({
       rvMode,
       entities: {

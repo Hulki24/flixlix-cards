@@ -205,10 +205,11 @@ describe("_computeRenderData", () => {
       const data = makeCard(config, hass)._computeRenderData();
 
       expect(data.rvMode).toBe(true);
-      expect(data.grid.state.toHome).toBe(300);
-      expect(data.grid.state.toBattery).toBe(200);
+      expect(data.grid.state.toHome).toBe(0);
+      expect(data.grid.state.toBattery).toBe(500);
       expect(data.solar.state.toBattery).toBe(100);
       expect(data.solar.state.toHome).toBe(0);
+      expect(data.battery.state.toHome).toBe(300);
       expect(data.grid.name).toBe("Configured Shore");
       expect(data.solar.name).toBe("Configured Solar");
       expect(data.battery.name).toBe("Configured House Battery");
@@ -243,12 +244,41 @@ describe("_computeRenderData", () => {
     expect(data.rvData.shorePower.entity).toBe("sensor.shore");
     expect(data.rvData.houseBattery.charge.entity).toBe("sensor.battery_charge");
     expect(data.rvData.houseBattery.discharge.entity).toBeUndefined();
-    expect(data.grid.state.toHome).toBe(300);
-    expect(data.grid.state.toBattery).toBe(200);
+    expect(data.grid.state.toHome).toBe(0);
+    expect(data.grid.state.toBattery).toBe(500);
+    expect(data.battery.state.toHome).toBe(300);
     expect(data.grid.name).toBe("Configured Shore");
     expect(data.battery.name).toBe("Configured House Battery");
     expect(data.home.name).toBe("Configured RV Loads");
     expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalled();
+  });
+
+  test("RV routes shore and measured RV consumption through the cabin battery", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.cabin_battery" },
+        home: { entity: "sensor.rv_consumption" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.shore": "114",
+        "sensor.solar": "0",
+        "sensor.cabin_battery": "0",
+        "sensor.rv_consumption": "75",
+      })
+    )._computeRenderData();
+
+    expect(data.grid.state.toBattery).toBe(114);
+    expect(data.solar.state.toBattery).toBe(0);
+    expect(data.battery.state.toHome).toBe(75);
+    expect(data.grid.state.toHome).toBe(0);
+    expect(data.solar.state.toHome).toBe(0);
   });
 
   test("invalid RV entity objects are ignored before entity state reads", () => {
