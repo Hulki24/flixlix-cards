@@ -287,7 +287,7 @@ describe("_computeRenderData", () => {
     expect(data.solar.state.toHome).toBe(0);
   });
 
-  test("AC charger power has priority and drives simultaneous battery display values", () => {
+  test("AC charger conversion losses are not rendered as Shore to RV flow", () => {
     const config = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
@@ -311,7 +311,7 @@ describe("_computeRenderData", () => {
     const data = makeCard(
       config,
       makeHass({
-        "sensor.shore": "221",
+        "sensor.shore": "218",
         "sensor.solar": "0",
         "sensor.legacy_battery": "0",
         "sensor.ac_output_power": "204",
@@ -324,6 +324,7 @@ describe("_computeRenderData", () => {
       })
     )._computeRenderData();
 
+    expect(data.grid.state.fromGrid).toBe(218);
     expect(data.grid.state.toBattery).toBe(204);
     expect(data.grid.state.toHome).toBe(0);
     expect(data.battery.state.toBattery).toBe(204);
