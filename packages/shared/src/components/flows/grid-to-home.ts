@@ -28,8 +28,7 @@ export const flowGridToHome = (
   config: FlowCardPlusConfig,
   { battery, grid, individual, solar, newDur }: Flows
 ) => {
-  const shouldShow =
-    grid.has && showLine(config, grid.state.fromGrid) && !config.entities.home?.hide;
+  const shouldShow = grid.has && showLine(config, grid.state.toHome) && !config.entities.home?.hide;
   if (!shouldShow) return nothing;
 
   return html`<div

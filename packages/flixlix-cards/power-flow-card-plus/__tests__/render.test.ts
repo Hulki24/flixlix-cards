@@ -11,6 +11,8 @@ vi.mock("@flixlix-cards/shared/utils/unavailable-error", () => ({
 }));
 
 import { type PowerFlowCardPlusConfig } from "@flixlix-cards/shared/types";
+import { flowElement } from "@flixlix-cards/shared/components/flows/index";
+import { render as renderTemplate } from "lit";
 import { PowerFlowCardPlus } from "../src/power-flow-card-plus";
 
 // jsdom does not provide ResizeObserver; stub it so the card's `updated` hook doesn't throw
@@ -114,6 +116,62 @@ describe("render", () => {
     card.connectedCallback();
     const rendered = (card as unknown as { render: () => unknown }).render();
     expect(rendered).toBeTruthy();
+  });
+
+  test("RV shore charging renders Grid to Battery without a Grid to Home flow", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      display_zero_lines: { mode: "hide" },
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.battery" },
+        home: {},
+      },
+    } as PowerFlowCardPlusConfig;
+    const container = document.createElement("div");
+
+    renderTemplate(
+      flowElement(
+        config,
+        {
+          grid: {
+            has: true,
+            state: { fromGrid: 44, toGrid: 0, toBattery: 36, toHome: 0 },
+          },
+          battery: {
+            has: true,
+            state: { fromBattery: 0, toBattery: 36, toGrid: 0, toHome: 0 },
+          },
+          solar: {
+            has: true,
+            hasReturnToGrid: false,
+            state: { total: 1, toGrid: 0, toBattery: 1, toHome: 0 },
+          },
+          individual: [],
+          newDur: {
+            batteryGrid: 1,
+            batteryToHome: 1,
+            gridToHome: 1,
+            solarToBattery: 1,
+            solarToGrid: 1,
+            solarToHome: 1,
+            individual: [],
+            nonFossil: 1,
+          },
+        },
+        true
+      ),
+      container
+    );
+
+    expect(container.querySelector("#battery-grid-flow")).not.toBeNull();
+    expect(container.querySelector("#grid-home-flow")).toBeNull();
+    expect(
+      container.querySelector("circle.battery-from-grid animateMotion")?.getAttribute("keyPoints")
+    ).toBe("1;0");
+    expect(container.querySelector("circle.battery-to-grid")).toBeNull();
   });
 });
 
