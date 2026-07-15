@@ -46,6 +46,37 @@ describe("power flow ui editor", () => {
     expect((editor as any)._config.rv_mode).toBe(true);
   });
 
+  test("editor config schema accepts neutral RV charger and cabin battery fields", async () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+      rv_mode: true,
+      rv: {
+        ac_charger: {
+          output_power: "sensor.ac_output_power",
+          output_voltage: "sensor.ac_output_voltage",
+          output_current: "sensor.ac_output_current",
+          state: "sensor.ac_state",
+        },
+        solar_charger: {
+          output_power: "sensor.solar_output_power",
+          state: "sensor.solar_state",
+        },
+        booster: {
+          output_power: "sensor.booster_output_power",
+          output_voltage: "sensor.booster_output_voltage",
+          output_current: "sensor.booster_output_current",
+          state: "sensor.booster_state",
+        },
+        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+      },
+    } as any;
+
+    await expect(editor.setConfig(config)).resolves.toBeUndefined();
+    expect((editor as any)._config.rv).toEqual(config.rv);
+  });
+
   test("valueChanged preserves RV mode as a top-level boolean", () => {
     const editor = new PowerFlowCardPlusEditor();
     const configChanged = vi.fn();

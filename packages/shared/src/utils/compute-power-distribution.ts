@@ -1,6 +1,9 @@
 export type ComputeEntityStateWatts = (entityId: string) => number;
 export type ComputeEntityState = (entityId: string | undefined) => number | null;
-import { computeRvPowerDistribution } from "./compute-rv-power-distribution";
+import {
+  computeRvPowerDistribution,
+  type RvPowerMeasurements,
+} from "./compute-rv-power-distribution";
 
 type ToleranceConfig = {
   grid?: { display_zero_tolerance?: number };
@@ -56,6 +59,7 @@ type NonFossil = {
 
 export function computePowerDistributionAfterSolarAndBattery(params: {
   rvMode?: boolean;
+  rvPower?: RvPowerMeasurements;
   entities: ToleranceConfig;
   grid: PowerGrid;
   solar: PowerSolar;

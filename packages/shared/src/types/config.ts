@@ -135,6 +135,17 @@ interface RvStarterBattery {
   power?: string;
 }
 
+interface RvOutputSource {
+  output_power?: string;
+  output_voltage?: string;
+  output_current?: string;
+  state?: string;
+}
+
+interface RvCabinBattery {
+  net_power?: string;
+}
+
 export interface RvConfig {
   shore_power?: RvEntity;
   solar?: RvEntity;
@@ -144,6 +155,10 @@ export interface RvConfig {
   ac_load?: RvEntity;
   inverter?: RvEntity;
   orion?: RvEntity;
+  ac_charger?: RvOutputSource;
+  solar_charger?: Pick<RvOutputSource, "output_power" | "state">;
+  booster?: RvOutputSource;
+  cabin_battery?: RvCabinBattery;
 }
 interface FossilFuelPercentage extends BaseConfigEntity {
   entity: string;

@@ -68,6 +68,7 @@ import {
   getTopRightIndividual,
 } from "@flixlix-cards/shared/utils/compute-individual-position";
 import { computePowerDistributionAfterSolarAndBattery } from "@flixlix-cards/shared/utils/compute-power-distribution";
+import { type RvPowerMeasurements } from "@flixlix-cards/shared/utils/compute-rv-power-distribution";
 import { displayValue } from "@flixlix-cards/shared/utils/display-value";
 import { defaultValues, getDefaultConfig } from "@flixlix-cards/shared/utils/get-default-config";
 import { registerCustomCard } from "@flixlix-cards/shared/utils/register-custom-card";
@@ -97,6 +98,13 @@ type RvRuntimeEntity = {
   state: number | null;
 };
 
+type RvRuntimeOutputSource = {
+  outputPower: RvRuntimeEntity;
+  outputVoltage: RvRuntimeEntity;
+  outputCurrent: RvRuntimeEntity;
+  state: RvRuntimeEntity;
+};
+
 type RvRuntimeData = {
   shorePower: RvRuntimeEntity;
   houseBattery: {
@@ -110,6 +118,12 @@ type RvRuntimeData = {
     power: RvRuntimeEntity;
   };
   solar: RvRuntimeEntity;
+  acCharger: RvRuntimeOutputSource;
+  solarCharger: Pick<RvRuntimeOutputSource, "outputPower" | "state">;
+  booster: RvRuntimeOutputSource;
+  cabinBattery: {
+    netPower: RvRuntimeEntity;
+  };
   acLoad: RvRuntimeEntity;
   dcLoad: RvRuntimeEntity;
   inverter: RvRuntimeEntity;
@@ -590,6 +604,13 @@ export class PowerFlowCardPlus extends LitElement {
     getPowerEntity: (entity?: string) => RvRuntimeEntity,
     getNumericEntity: (entity?: string) => RvRuntimeEntity
   ): RvRuntimeData {
+    const getOutputSource = (source: RvConfig["ac_charger"]): RvRuntimeOutputSource => ({
+      outputPower: getPowerEntity(this._getEntityId(source?.output_power)),
+      outputVoltage: getNumericEntity(this._getEntityId(source?.output_voltage)),
+      outputCurrent: getNumericEntity(this._getEntityId(source?.output_current)),
+      state: getNumericEntity(this._getEntityId(source?.state)),
+    });
+
     return {
       shorePower: getPowerEntity(this._getEntityId(rv?.shore_power?.entity)),
       houseBattery: {
@@ -603,6 +624,15 @@ export class PowerFlowCardPlus extends LitElement {
         power: getPowerEntity(this._getEntityId(rv?.starter_battery?.power)),
       },
       solar: getPowerEntity(this._getEntityId(rv?.solar?.entity)),
+      acCharger: getOutputSource(rv?.ac_charger),
+      solarCharger: {
+        outputPower: getPowerEntity(this._getEntityId(rv?.solar_charger?.output_power)),
+        state: getNumericEntity(this._getEntityId(rv?.solar_charger?.state)),
+      },
+      booster: getOutputSource(rv?.booster),
+      cabinBattery: {
+        netPower: getPowerEntity(this._getEntityId(rv?.cabin_battery?.net_power)),
+      },
       acLoad: getPowerEntity(this._getEntityId(rv?.ac_load?.entity)),
       dcLoad: getPowerEntity(this._getEntityId(rv?.dc_load?.entity)),
       inverter: getPowerEntity(this._getEntityId(rv?.inverter?.entity)),
@@ -932,15 +962,33 @@ export class PowerFlowCardPlus extends LitElement {
       battery.state.toGrid = 0;
       battery.state.toHome = 0;
     }
-    if (rvMode) {
-      const configuredHomeConsumption =
-        typeof entities.home?.entity === "string"
-          ? getEntityStateWatts(this.hass, entities.home.entity)
-          : 0;
-      battery.state.toHome = Math.max(rvData.acLoad.state ?? configuredHomeConsumption, 0);
-    }
+    const getConfiguredOutput = (
+      source: RvRuntimeOutputSource | Pick<RvRuntimeOutputSource, "outputPower">
+    ): number | null => {
+      if (source.outputPower.has) return source.outputPower.state ?? 0;
+      if (!("outputVoltage" in source) || !source.outputVoltage.has || !source.outputCurrent.has) {
+        return null;
+      }
+      return (source.outputVoltage.state ?? 0) * (source.outputCurrent.state ?? 0);
+    };
+    const rvPower: RvPowerMeasurements | undefined = rvMode
+      ? {
+          acChargerOutput:
+            getConfiguredOutput(rvData.acCharger) ??
+            (this._config.rv?.house_battery?.charge
+              ? rvData.houseBattery.charge.state
+              : grid.state.fromGrid),
+          solarChargerOutput:
+            getConfiguredOutput(rvData.solarCharger) ?? rvData.solar.state ?? solar.state.total,
+          boosterOutput: getConfiguredOutput(rvData.booster) ?? rvData.orion.state ?? 0,
+          cabinBatteryNetPower: rvData.cabinBattery.netPower.has
+            ? rvData.cabinBattery.netPower.state
+            : (battery.state.toBattery ?? 0) - (battery.state.fromBattery ?? 0),
+        }
+      : undefined;
     computePowerDistributionAfterSolarAndBattery({
       rvMode,
+      rvPower,
       entities: {
         grid: entities.grid,
         battery: entities.battery,

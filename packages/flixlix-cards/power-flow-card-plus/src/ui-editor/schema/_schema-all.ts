@@ -47,6 +47,7 @@ export const cardConfigStruct = assign(
         rv_mode: optional(boolean()),
       })
     ),
+    rv: optional(any()),
     use_new_flow_rate_model: optional(boolean()),
     full_size: optional(boolean()),
     style_ha_card: optional(any()),

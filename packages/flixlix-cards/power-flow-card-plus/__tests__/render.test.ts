@@ -209,7 +209,9 @@ describe("_computeRenderData", () => {
       expect(data.grid.state.toBattery).toBe(500);
       expect(data.solar.state.toBattery).toBe(100);
       expect(data.solar.state.toHome).toBe(0);
-      expect(data.battery.state.toHome).toBe(300);
+      expect(data.battery.state.toBattery).toBe(600);
+      expect(data.battery.state.fromBattery).toBe(400);
+      expect(data.battery.state.toHome).toBe(400);
       expect(data.grid.name).toBe("Configured Shore");
       expect(data.solar.name).toBe("Configured Solar");
       expect(data.battery.name).toBe("Configured House Battery");
@@ -246,6 +248,8 @@ describe("_computeRenderData", () => {
     expect(data.rvData.houseBattery.discharge.entity).toBeUndefined();
     expect(data.grid.state.toHome).toBe(0);
     expect(data.grid.state.toBattery).toBe(500);
+    expect(data.battery.state.toBattery).toBe(500);
+    expect(data.battery.state.fromBattery).toBe(300);
     expect(data.battery.state.toHome).toBe(300);
     expect(data.grid.name).toBe("Configured Shore");
     expect(data.battery.name).toBe("Configured House Battery");
@@ -253,7 +257,7 @@ describe("_computeRenderData", () => {
     expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalled();
   });
 
-  test("RV routes shore and measured RV consumption through the cabin battery", () => {
+  test("classic RV fallback derives display values from available source and net power", () => {
     const config = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
@@ -276,9 +280,199 @@ describe("_computeRenderData", () => {
 
     expect(data.grid.state.toBattery).toBe(114);
     expect(data.solar.state.toBattery).toBe(0);
-    expect(data.battery.state.toHome).toBe(75);
+    expect(data.battery.state.toBattery).toBe(114);
+    expect(data.battery.state.fromBattery).toBe(114);
+    expect(data.battery.state.toHome).toBe(114);
     expect(data.grid.state.toHome).toBe(0);
     expect(data.solar.state.toHome).toBe(0);
+  });
+
+  test("AC charger power has priority and drives simultaneous battery display values", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.legacy_battery" },
+      },
+      rv: {
+        ac_charger: {
+          output_power: "sensor.ac_output_power",
+          output_voltage: "sensor.ac_output_voltage",
+          output_current: "sensor.ac_output_current",
+          state: "sensor.ac_state",
+        },
+        solar_charger: { output_power: "sensor.solar_output_power" },
+        booster: { output_power: "sensor.booster_output_power" },
+        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.shore": "221",
+        "sensor.solar": "0",
+        "sensor.legacy_battery": "0",
+        "sensor.ac_output_power": "204",
+        "sensor.ac_output_voltage": "20",
+        "sensor.ac_output_current": "20",
+        "sensor.ac_state": "1",
+        "sensor.solar_output_power": "0",
+        "sensor.booster_output_power": "0",
+        "sensor.cabin_battery_net_power": "159",
+      })
+    )._computeRenderData();
+
+    expect(data.grid.state.toBattery).toBe(204);
+    expect(data.grid.state.toHome).toBe(0);
+    expect(data.battery.state.toBattery).toBe(204);
+    expect(data.battery.state.fromBattery).toBe(45);
+    expect(data.battery.state.toHome).toBe(45);
+  });
+
+  test("solar charger output is routed through the cabin battery", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.legacy_battery" },
+      },
+      rv: {
+        ac_charger: { output_power: "sensor.ac_output_power" },
+        solar_charger: { output_power: "sensor.solar_output_power" },
+        booster: { output_power: "sensor.booster_output_power" },
+        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.shore": "0",
+        "sensor.solar": "0",
+        "sensor.legacy_battery": "0",
+        "sensor.ac_output_power": "0",
+        "sensor.solar_output_power": "120",
+        "sensor.booster_output_power": "0",
+        "sensor.cabin_battery_net_power": "70",
+      })
+    )._computeRenderData();
+
+    expect(data.solar.state.toBattery).toBe(120);
+    expect(data.solar.state.toHome).toBe(0);
+    expect(data.battery.state.toBattery).toBe(120);
+    expect(data.battery.state.fromBattery).toBe(50);
+    expect(data.battery.state.toHome).toBe(50);
+  });
+
+  test("booster voltage and current fallback contributes to cabin battery display input", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.legacy_battery" },
+      },
+      rv: {
+        ac_charger: { output_power: "sensor.ac_output_power" },
+        solar_charger: { output_power: "sensor.solar_output_power" },
+        booster: {
+          output_voltage: "sensor.booster_output_voltage",
+          output_current: "sensor.booster_output_current",
+        },
+        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.shore": "0",
+        "sensor.solar": "0",
+        "sensor.legacy_battery": "0",
+        "sensor.ac_output_power": "0",
+        "sensor.solar_output_power": "0",
+        "sensor.booster_output_voltage": "15",
+        "sensor.booster_output_current": "20",
+        "sensor.cabin_battery_net_power": "250",
+      })
+    )._computeRenderData();
+
+    expect(data.battery.state.toBattery).toBe(300);
+    expect(data.battery.state.fromBattery).toBe(50);
+    expect(data.battery.state.toHome).toBe(50);
+  });
+
+  test("battery discharge without charging sources becomes RV display output", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.legacy_battery" },
+      },
+      rv: {
+        ac_charger: { output_power: "sensor.ac_output_power" },
+        solar_charger: { output_power: "sensor.solar_output_power" },
+        booster: { output_power: "sensor.booster_output_power" },
+        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.shore": "0",
+        "sensor.solar": "0",
+        "sensor.legacy_battery": "0",
+        "sensor.ac_output_power": "0",
+        "sensor.solar_output_power": "0",
+        "sensor.booster_output_power": "0",
+        "sensor.cabin_battery_net_power": "-75",
+      })
+    )._computeRenderData();
+
+    expect(data.battery.state.toBattery).toBe(0);
+    expect(data.battery.state.fromBattery).toBe(75);
+    expect(data.battery.state.toHome).toBe(75);
+  });
+
+  test("negative source measurements never produce negative display values", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.legacy_battery" },
+      },
+      rv: {
+        ac_charger: { output_power: "sensor.ac_output_power" },
+        solar_charger: { output_power: "sensor.solar_output_power" },
+        booster: { output_power: "sensor.booster_output_power" },
+        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.shore": "0",
+        "sensor.solar": "0",
+        "sensor.legacy_battery": "0",
+        "sensor.ac_output_power": "-10",
+        "sensor.solar_output_power": "-20",
+        "sensor.booster_output_power": "-30",
+        "sensor.cabin_battery_net_power": "10",
+      })
+    )._computeRenderData();
+
+    expect(data.grid.state.toBattery).toBe(0);
+    expect(data.solar.state.toBattery).toBe(0);
+    expect(data.battery.state.toBattery).toBe(0);
+    expect(data.battery.state.fromBattery).toBe(0);
+    expect(data.battery.state.toHome).toBe(0);
   });
 
   test("invalid RV entity objects are ignored before entity state reads", () => {
