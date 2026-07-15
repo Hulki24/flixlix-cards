@@ -79,6 +79,11 @@ export const generalConfigSchema = [
     label: "Title",
     selector: { text: {} },
   },
+  {
+    name: "rv_mode",
+    label: "RV Mode",
+    selector: { boolean: {} },
+  },
 ] as const;
 
 export const entitiesSchema = memoizeOne((localize) => [

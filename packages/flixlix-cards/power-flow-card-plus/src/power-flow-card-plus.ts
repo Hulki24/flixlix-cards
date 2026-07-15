@@ -591,22 +591,22 @@ export class PowerFlowCardPlus extends LitElement {
     getNumericEntity: (entity?: string) => RvRuntimeEntity
   ): RvRuntimeData {
     return {
-      shorePower: getPowerEntity(rv?.shore_power?.entity),
+      shorePower: getPowerEntity(this._getEntityId(rv?.shore_power?.entity)),
       houseBattery: {
-        charge: getPowerEntity(rv?.house_battery?.charge),
-        discharge: getPowerEntity(rv?.house_battery?.discharge),
-        soc: getNumericEntity(rv?.house_battery?.soc),
+        charge: getPowerEntity(this._getEntityId(rv?.house_battery?.charge)),
+        discharge: getPowerEntity(this._getEntityId(rv?.house_battery?.discharge)),
+        soc: getNumericEntity(this._getEntityId(rv?.house_battery?.soc)),
       },
       starterBattery: {
-        voltage: getNumericEntity(rv?.starter_battery?.voltage),
-        current: getNumericEntity(rv?.starter_battery?.current),
-        power: getPowerEntity(rv?.starter_battery?.power),
+        voltage: getNumericEntity(this._getEntityId(rv?.starter_battery?.voltage)),
+        current: getNumericEntity(this._getEntityId(rv?.starter_battery?.current)),
+        power: getPowerEntity(this._getEntityId(rv?.starter_battery?.power)),
       },
-      solar: getPowerEntity(rv?.solar?.entity),
-      acLoad: getPowerEntity(rv?.ac_load?.entity),
-      dcLoad: getPowerEntity(rv?.dc_load?.entity),
-      inverter: getPowerEntity(rv?.inverter?.entity),
-      orion: getPowerEntity(rv?.orion?.entity),
+      solar: getPowerEntity(this._getEntityId(rv?.solar?.entity)),
+      acLoad: getPowerEntity(this._getEntityId(rv?.ac_load?.entity)),
+      dcLoad: getPowerEntity(this._getEntityId(rv?.dc_load?.entity)),
+      inverter: getPowerEntity(this._getEntityId(rv?.inverter?.entity)),
+      orion: getPowerEntity(this._getEntityId(rv?.orion?.entity)),
     };
   }
 
@@ -615,14 +615,26 @@ export class PowerFlowCardPlus extends LitElement {
   }
 
   private _getEntityId(
-    entity: string | ComboEntity | undefined,
+    entity: unknown,
     direction: "consumption" | "production" | "any" = "any"
   ): string | undefined {
-    if (typeof entity === "string") return entity;
-    if (!entity) return undefined;
-    if (direction === "consumption") return entity.consumption;
-    if (direction === "production") return entity.production;
-    return entity.consumption || entity.production;
+    const normalizeEntityId = (value: unknown): string | undefined => {
+      if (typeof value !== "string") return undefined;
+      const entityIds = value.split("|").map((id) => id.trim());
+      if (entityIds.length === 0 || entityIds.some((id) => !/^[a-z0-9_]+\.[a-z0-9_]+$/i.test(id))) {
+        return undefined;
+      }
+      return entityIds.join(" | ");
+    };
+
+    const directEntityId = normalizeEntityId(entity);
+    if (directEntityId) return directEntityId;
+    if (!entity || typeof entity !== "object") return undefined;
+
+    const comboEntity = entity as Partial<ComboEntity>;
+    if (direction === "consumption") return normalizeEntityId(comboEntity.consumption);
+    if (direction === "production") return normalizeEntityId(comboEntity.production);
+    return normalizeEntityId(comboEntity.consumption) ?? normalizeEntityId(comboEntity.production);
   }
 
   private _getRvConfigWithFallback(rvMode: boolean): RvConfig | undefined {
@@ -636,8 +648,8 @@ export class PowerFlowCardPlus extends LitElement {
         entity: this._getEntityId(entities.grid?.entity, "consumption"),
       },
       house_battery: {
-        charge: this._getEntityId(entities.battery?.entity, "consumption"),
-        discharge: this._getEntityId(entities.battery?.entity, "production"),
+        charge: this._getEntityId(entities.battery?.entity, "production"),
+        discharge: this._getEntityId(entities.battery?.entity, "consumption"),
         soc: entities.battery?.state_of_charge,
       },
       solar: {

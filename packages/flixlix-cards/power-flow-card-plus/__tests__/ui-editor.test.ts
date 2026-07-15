@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { generalConfigSchema } from "../src/ui-editor/schema/_schema-all";
 import { PowerFlowCardPlusEditor } from "../src/ui-editor/ui-editor";
 
 const { loadHaFormMock } = vi.hoisted(() => ({
@@ -21,6 +22,54 @@ describe("power flow ui editor", () => {
     editor.connectedCallback();
 
     expect(loadHaFormMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("general schema exposes RV mode as a boolean switch", () => {
+    const rvModeField = generalConfigSchema.find((field) => field.name === "rv_mode");
+
+    expect(rvModeField).toEqual({
+      name: "rv_mode",
+      label: "RV Mode",
+      selector: { boolean: {} },
+    });
+  });
+
+  test("editor config schema accepts and retains top-level RV mode", async () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+      rv_mode: true,
+    } as any;
+
+    await expect(editor.setConfig(config)).resolves.toBeUndefined();
+    expect((editor as any)._config.rv_mode).toBe(true);
+  });
+
+  test("valueChanged preserves RV mode as a top-level boolean", () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const configChanged = vi.fn();
+    editor.addEventListener("config-changed", configChanged);
+    (editor as any).hass = { localize: vi.fn() };
+    (editor as any)._config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+    };
+    (editor as any)._currentConfigPage = null;
+
+    (editor as any)._valueChanged({
+      detail: {
+        value: {
+          type: "custom:power-flow-card-plus",
+          entities: { grid: { entity: "sensor.shore" } },
+          rv_mode: true,
+        },
+      },
+    });
+
+    const config = configChanged.mock.calls[0]?.[0]?.detail?.config;
+    expect(config.rv_mode).toBe(true);
+    expect(typeof config.rv_mode).toBe("boolean");
   });
 
   test("migrateLegacyFields maps legacy power decimal and threshold fields", () => {

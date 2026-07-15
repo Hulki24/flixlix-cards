@@ -1,6 +1,14 @@
 // test that the card renders correctly
 
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+const { unavailableOrMisconfiguredErrorMock } = vi.hoisted(() => ({
+  unavailableOrMisconfiguredErrorMock: vi.fn(),
+}));
+
+vi.mock("@flixlix-cards/shared/utils/unavailable-error", () => ({
+  unavailableOrMisconfiguredError: unavailableOrMisconfiguredErrorMock,
+}));
 
 import { type PowerFlowCardPlusConfig } from "@flixlix-cards/shared/types";
 import { PowerFlowCardPlus } from "../src/power-flow-card-plus";
@@ -77,8 +85,19 @@ declare function computeRenderDataShape(): {
   };
   home: { name: string };
   rvMode: boolean;
+  rvData: {
+    shorePower: { entity?: string; state: number | null };
+    houseBattery: {
+      charge: { entity?: string; state: number | null };
+      discharge: { entity?: string; state: number | null };
+    };
+  };
   individualObjs: Array<{ has: boolean; state: number | null }>;
 };
+
+beforeEach(() => {
+  unavailableOrMisconfiguredErrorMock.mockReset();
+});
 
 describe("render", () => {
   test("renders correctly", () => {
@@ -138,6 +157,59 @@ describe("_computeRenderData", () => {
       expect(data.home.name).toBe("Configured RV Loads");
     }
   );
+
+  test("classic RV fallback skips missing split entities without reading Unknown", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: {
+          entity: { consumption: "sensor.shore" },
+          name: "Configured Shore",
+        },
+        battery: {
+          entity: { production: "sensor.battery_charge" },
+          name: "Configured House Battery",
+        },
+        home: { entity: "sensor.loads", name: "Configured RV Loads" },
+      },
+    } as unknown as PowerFlowCardPlusConfig;
+    const hass = makeHass({
+      "sensor.shore": "500",
+      "sensor.battery_charge": "200",
+      "sensor.loads": "300",
+    });
+
+    const data = makeCard(config, hass)._computeRenderData();
+
+    expect(data.rvData.shorePower.entity).toBe("sensor.shore");
+    expect(data.rvData.houseBattery.charge.entity).toBe("sensor.battery_charge");
+    expect(data.rvData.houseBattery.discharge.entity).toBeUndefined();
+    expect(data.grid.state.toHome).toBe(300);
+    expect(data.grid.state.toBattery).toBe(200);
+    expect(data.grid.name).toBe("Configured Shore");
+    expect(data.battery.name).toBe("Configured House Battery");
+    expect(data.home.name).toBe("Configured RV Loads");
+    expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalled();
+  });
+
+  test("invalid RV entity objects are ignored before entity state reads", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.shore" } },
+      rv: {
+        shore_power: {
+          entity: { entity: "sensor.shore" },
+        },
+      },
+    } as unknown as PowerFlowCardPlusConfig;
+    const data = makeCard(config, makeHass({ "sensor.shore": "500" }))._computeRenderData();
+
+    expect(data.rvData.shorePower.entity).toBeUndefined();
+    expect(data.rvData.shorePower.state).toBeNull();
+    expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalledWith(undefined);
+  });
 
   test("case 1: grid-only consumption — fromGrid is the entity value and toHome follows", () => {
     const config = {

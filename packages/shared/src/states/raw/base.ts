@@ -45,7 +45,7 @@ export const getFieldInState = (
 
     return onlyNegative(state);
   }
-  return getEntityStateWatts(hass, entity!.production);
+  return entity.production ? getEntityStateWatts(hass, entity.production) : null;
 };
 
 export const getFieldOutState = (
@@ -64,5 +64,5 @@ export const getFieldOutState = (
 
     return onlyPositive(state);
   }
-  return getEntityStateWatts(hass, entity!.consumption);
+  return entity.consumption ? getEntityStateWatts(hass, entity.consumption) : null;
 };
