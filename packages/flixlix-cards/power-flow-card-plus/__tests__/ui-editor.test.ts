@@ -34,47 +34,157 @@ describe("power flow ui editor", () => {
     });
   });
 
-  test("editor config schema accepts and retains top-level RV mode", async () => {
+  test.each([{ rv_mode: true }, { main_config: { rv_mode: true } }])(
+    "editor config schema accepts and retains RV mode",
+    async (modeConfig) => {
     const editor = new PowerFlowCardPlusEditor();
     const config = {
       type: "custom:power-flow-card-plus",
       entities: { grid: { entity: "sensor.shore" } },
-      rv_mode: true,
+      ...modeConfig,
     } as any;
 
     await expect(editor.setConfig(config)).resolves.toBeUndefined();
-    expect((editor as any)._config.rv_mode).toBe(true);
-  });
+    expect((editor as any)._config).toMatchObject(modeConfig);
+    }
+  );
 
-  test("editor config schema accepts neutral RV charger and cabin battery fields", async () => {
+  test("editor config schema accepts the complete neutral RV structure", async () => {
     const editor = new PowerFlowCardPlusEditor();
     const config = {
       type: "custom:power-flow-card-plus",
       entities: { grid: { entity: "sensor.shore" } },
       rv_mode: true,
       rv: {
+        shore: {
+          input_power: "sensor.shore_input_power",
+        },
         ac_charger: {
+          state: "sensor.ac_state",
+          input_power: "sensor.ac_input_power",
+          input_voltage: "sensor.ac_input_voltage",
+          input_current: "sensor.ac_input_current",
           output_power: "sensor.ac_output_power",
           output_voltage: "sensor.ac_output_voltage",
           output_current: "sensor.ac_output_current",
-          state: "sensor.ac_state",
         },
         solar_charger: {
-          output_power: "sensor.solar_output_power",
           state: "sensor.solar_state",
+          output_power: "sensor.solar_output_power",
+          output_voltage: "sensor.solar_output_voltage",
+          output_current: "sensor.solar_output_current",
         },
         booster: {
+          state: "sensor.booster_state",
+          input_power: "sensor.booster_input_power",
+          input_voltage: "sensor.booster_input_voltage",
+          input_current: "sensor.booster_input_current",
           output_power: "sensor.booster_output_power",
           output_voltage: "sensor.booster_output_voltage",
           output_current: "sensor.booster_output_current",
-          state: "sensor.booster_state",
         },
-        cabin_battery: { net_power: "sensor.cabin_battery_net_power" },
+        cabin_battery: {
+          net_power: "sensor.cabin_battery_net_power",
+          voltage: "sensor.cabin_battery_voltage",
+          state_of_charge: "sensor.cabin_battery_soc",
+          charging_state: "binary_sensor.cabin_battery_charging",
+        },
+        starter_battery: {
+          voltage: "sensor.starter_battery_voltage",
+          power: "sensor.starter_battery_power",
+        },
+        loads: {
+          total_power: "sensor.rv_total_power",
+          ac_power: "sensor.rv_ac_power",
+          dc_power: "sensor.rv_dc_power",
+        },
       },
     } as any;
 
     await expect(editor.setConfig(config)).resolves.toBeUndefined();
     expect((editor as any)._config.rv).toEqual(config.rv);
+  });
+
+  test.each([
+    { rv: {} },
+    { rv: { shore: { input_power: "sensor.shore" } } },
+    { rv: { cabin_battery: { net_power: "sensor.battery_net" } } },
+    { rv: { loads: { dc_power: "sensor.rv_dc_load" } } },
+  ])("neutral RV subgroups are independently optional", async (partialConfig) => {
+    const editor = new PowerFlowCardPlusEditor();
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+      rv_mode: true,
+      ...partialConfig,
+    } as any;
+
+    await expect(editor.setConfig(config)).resolves.toBeUndefined();
+  });
+
+  test.each([
+    { shore: { input_power: 42 } },
+    { ac_charger: { output_power: "not-an-entity" } },
+    { solar_charger: "sensor.solar" },
+    { booster: { input_current: false } },
+    { cabin_battery: { charging_state: "invalid" } },
+    { starter_battery: { voltage: ["sensor.voltage"] } },
+    { loads: { total_power: { entity: "sensor.loads" } } },
+  ])("invalid neutral RV field types or entity IDs are rejected", async (rv) => {
+    const editor = new PowerFlowCardPlusEditor();
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+      rv_mode: true,
+      rv,
+    } as any;
+
+    await expect(editor.setConfig(config)).rejects.toThrow();
+  });
+
+  test("existing legacy RV YAML remains valid", async () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+      rv_mode: true,
+      rv: {
+        shore_power: { entity: "sensor.shore" },
+        solar: { entity: "sensor.solar" },
+        house_battery: {
+          charge: "sensor.battery_charge",
+          discharge: "sensor.battery_discharge",
+          soc: "sensor.battery_soc",
+        },
+        starter_battery: {
+          voltage: "sensor.starter_voltage",
+          current: "sensor.starter_current",
+          power: "sensor.starter_power",
+        },
+        dc_load: { entity: "sensor.dc_load" },
+        ac_load: { entity: "sensor.ac_load" },
+        inverter: { entity: "sensor.inverter" },
+        orion: { entity: "sensor.orion" },
+      },
+    } as any;
+
+    await expect(editor.setConfig(config)).resolves.toBeUndefined();
+    expect((editor as any)._config.rv).toEqual(config.rv);
+  });
+
+  test("existing Classic config remains valid without an RV block", async () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: {
+        grid: { entity: "sensor.grid" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.battery" },
+        home: { entity: "sensor.home" },
+      },
+    } as any;
+
+    await expect(editor.setConfig(config)).resolves.toBeUndefined();
   });
 
   test("valueChanged preserves RV mode as a top-level boolean", () => {

@@ -119,46 +119,82 @@ interface Home extends BaseConfigEntity {
 
 
 
-interface RvEntity {
-  entity?: string;
+/** Home Assistant entity ID; validated structurally at configuration boundaries. */
+export type EntityId = string;
+
+interface LegacyRvEntity {
+  entity?: EntityId;
 }
 
-interface RvHouseBattery {
-  charge?: string;
-  discharge?: string;
-  soc?: string;
+interface LegacyRvHouseBattery {
+  charge?: EntityId;
+  discharge?: EntityId;
+  soc?: EntityId;
 }
 
-interface RvStarterBattery {
-  voltage?: string;
-  current?: string;
-  power?: string;
+export interface RvShoreConfig {
+  input_power?: EntityId;
 }
 
-interface RvOutputSource {
-  output_power?: string;
-  output_voltage?: string;
-  output_current?: string;
-  state?: string;
+export interface RvOutputConfig {
+  state?: EntityId;
+  output_power?: EntityId;
+  output_voltage?: EntityId;
+  output_current?: EntityId;
 }
 
-interface RvCabinBattery {
-  net_power?: string;
+export interface RvAcChargerConfig extends RvOutputConfig {
+  input_power?: EntityId;
+  input_voltage?: EntityId;
+  input_current?: EntityId;
+}
+
+export type RvSolarChargerConfig = RvOutputConfig;
+
+export interface RvBoosterConfig extends RvOutputConfig {
+  input_power?: EntityId;
+  input_voltage?: EntityId;
+  input_current?: EntityId;
+}
+
+export interface RvCabinBatteryConfig {
+  net_power?: EntityId;
+  voltage?: EntityId;
+  state_of_charge?: EntityId;
+  charging_state?: EntityId;
+}
+
+export interface RvStarterBatteryConfig {
+  voltage?: EntityId;
+  power?: EntityId;
+  /** @deprecated Legacy RV field retained for compatibility. */
+  current?: EntityId;
+}
+
+export interface RvLoadsConfig {
+  total_power?: EntityId;
+  ac_power?: EntityId;
+  dc_power?: EntityId;
 }
 
 export interface RvConfig {
-  shore_power?: RvEntity;
-  solar?: RvEntity;
-  house_battery?: RvHouseBattery;
-  starter_battery?: RvStarterBattery;
-  dc_load?: RvEntity;
-  ac_load?: RvEntity;
-  inverter?: RvEntity;
-  orion?: RvEntity;
-  ac_charger?: RvOutputSource;
-  solar_charger?: Pick<RvOutputSource, "output_power" | "state">;
-  booster?: RvOutputSource;
-  cabin_battery?: RvCabinBattery;
+  // Neutral RV configuration.
+  shore?: RvShoreConfig;
+  ac_charger?: RvAcChargerConfig;
+  solar_charger?: RvSolarChargerConfig;
+  booster?: RvBoosterConfig;
+  cabin_battery?: RvCabinBatteryConfig;
+  starter_battery?: RvStarterBatteryConfig;
+  loads?: RvLoadsConfig;
+
+  // Legacy RV configuration retained during the compatibility period.
+  shore_power?: LegacyRvEntity;
+  solar?: LegacyRvEntity;
+  house_battery?: LegacyRvHouseBattery;
+  dc_load?: LegacyRvEntity;
+  ac_load?: LegacyRvEntity;
+  inverter?: LegacyRvEntity;
+  orion?: LegacyRvEntity;
 }
 interface FossilFuelPercentage extends BaseConfigEntity {
   entity: string;

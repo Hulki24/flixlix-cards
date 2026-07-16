@@ -7,7 +7,111 @@ import { individualSchema } from "@flixlix-cards/shared/ui-editor/schema/individ
 import { solarSchema } from "@flixlix-cards/shared/ui-editor/schema/solar";
 import { mdiBatteryHigh, mdiHome, mdiLeaf, mdiTransmissionTower, mdiWeatherSunny } from "@mdi/js";
 import memoizeOne from "memoize-one";
-import { any, assign, boolean, integer, number, object, optional, string } from "superstruct";
+import {
+  any,
+  assign,
+  boolean,
+  define,
+  integer,
+  number,
+  object,
+  optional,
+  string,
+} from "superstruct";
+
+const entityIdPattern = /^[a-z0-9_]+\.[a-z0-9_]+$/i;
+
+export const entityIdStruct = define<string>("entity ID", (value) =>
+  typeof value === "string" ? entityIdPattern.test(value) : false
+);
+
+const legacyEntityIdStruct = define<string>("legacy entity ID", (value) => {
+  if (typeof value !== "string") return false;
+  return value
+    .split("|")
+    .map((entityId) => entityId.trim())
+    .every((entityId) => entityIdPattern.test(entityId));
+});
+
+const legacyRvEntityStruct = object({
+  entity: optional(legacyEntityIdStruct),
+});
+
+const rvOutputStruct = {
+  state: optional(entityIdStruct),
+  output_power: optional(entityIdStruct),
+  output_voltage: optional(entityIdStruct),
+  output_current: optional(entityIdStruct),
+};
+
+export const rvConfigStruct = object({
+  // Neutral RV configuration.
+  shore: optional(
+    object({
+      input_power: optional(entityIdStruct),
+    })
+  ),
+  ac_charger: optional(
+    object({
+      state: rvOutputStruct.state,
+      input_power: optional(entityIdStruct),
+      input_voltage: optional(entityIdStruct),
+      input_current: optional(entityIdStruct),
+      output_power: rvOutputStruct.output_power,
+      output_voltage: rvOutputStruct.output_voltage,
+      output_current: rvOutputStruct.output_current,
+    })
+  ),
+  solar_charger: optional(object(rvOutputStruct)),
+  booster: optional(
+    object({
+      state: rvOutputStruct.state,
+      input_power: optional(entityIdStruct),
+      input_voltage: optional(entityIdStruct),
+      input_current: optional(entityIdStruct),
+      output_power: rvOutputStruct.output_power,
+      output_voltage: rvOutputStruct.output_voltage,
+      output_current: rvOutputStruct.output_current,
+    })
+  ),
+  cabin_battery: optional(
+    object({
+      net_power: optional(entityIdStruct),
+      voltage: optional(entityIdStruct),
+      state_of_charge: optional(entityIdStruct),
+      charging_state: optional(entityIdStruct),
+    })
+  ),
+  starter_battery: optional(
+    object({
+      voltage: optional(entityIdStruct),
+      power: optional(entityIdStruct),
+      current: optional(legacyEntityIdStruct),
+    })
+  ),
+  loads: optional(
+    object({
+      total_power: optional(entityIdStruct),
+      ac_power: optional(entityIdStruct),
+      dc_power: optional(entityIdStruct),
+    })
+  ),
+
+  // Legacy RV configuration retained during the compatibility period.
+  shore_power: optional(legacyRvEntityStruct),
+  solar: optional(legacyRvEntityStruct),
+  house_battery: optional(
+    object({
+      charge: optional(legacyEntityIdStruct),
+      discharge: optional(legacyEntityIdStruct),
+      soc: optional(legacyEntityIdStruct),
+    })
+  ),
+  dc_load: optional(legacyRvEntityStruct),
+  ac_load: optional(legacyRvEntityStruct),
+  inverter: optional(legacyRvEntityStruct),
+  orion: optional(legacyRvEntityStruct),
+});
 
 const baseLovelaceCardConfig = object({
   type: string(),
@@ -47,7 +151,7 @@ export const cardConfigStruct = assign(
         rv_mode: optional(boolean()),
       })
     ),
-    rv: optional(any()),
+    rv: optional(rvConfigStruct),
     use_new_flow_rate_model: optional(boolean()),
     full_size: optional(boolean()),
     style_ha_card: optional(any()),
