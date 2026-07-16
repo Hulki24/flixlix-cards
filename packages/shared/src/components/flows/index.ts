@@ -25,7 +25,7 @@ export const flowElement = (
   ${flowSolarToHome(config, { battery, grid, individual, solar, newDur }, rvMode)}
   ${flowSolarToGrid(config, { battery, grid, individual, solar, newDur })}
   ${flowSolarToBattery(config, { battery, individual, solar, newDur })}
-  ${flowGridToHome(config, { battery, grid, individual, solar, newDur })}
+  ${flowGridToHome(config, { battery, grid, individual, solar, newDur }, rvMode)}
   ${flowBatteryToHome(config, { battery, grid, individual, newDur })}
   ${flowBatteryToGrid(config, { battery, grid, individual, newDur })}
 </div>`;

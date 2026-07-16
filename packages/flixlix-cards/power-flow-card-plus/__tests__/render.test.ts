@@ -206,12 +206,12 @@ describe("_computeRenderData", () => {
 
       expect(data.rvMode).toBe(true);
       expect(data.grid.state.toHome).toBe(0);
-      expect(data.grid.state.toBattery).toBe(500);
+      expect(data.grid.state.toBattery).toBe(200);
       expect(data.solar.state.toBattery).toBe(100);
       expect(data.solar.state.toHome).toBe(0);
-      expect(data.battery.state.toBattery).toBe(600);
-      expect(data.battery.state.fromBattery).toBe(400);
-      expect(data.battery.state.toHome).toBe(400);
+      expect(data.battery.state.toBattery).toBe(300);
+      expect(data.battery.state.fromBattery).toBe(100);
+      expect(data.battery.state.toHome).toBe(100);
       expect(data.grid.name).toBe("Configured Shore");
       expect(data.solar.name).toBe("Configured Solar");
       expect(data.battery.name).toBe("Configured House Battery");
@@ -247,17 +247,17 @@ describe("_computeRenderData", () => {
     expect(data.rvData.houseBattery.charge.entity).toBe("sensor.battery_charge");
     expect(data.rvData.houseBattery.discharge.entity).toBeUndefined();
     expect(data.grid.state.toHome).toBe(0);
-    expect(data.grid.state.toBattery).toBe(500);
-    expect(data.battery.state.toBattery).toBe(500);
-    expect(data.battery.state.fromBattery).toBe(300);
-    expect(data.battery.state.toHome).toBe(300);
+    expect(data.grid.state.toBattery).toBe(200);
+    expect(data.battery.state.toBattery).toBe(200);
+    expect(data.battery.state.fromBattery).toBe(0);
+    expect(data.battery.state.toHome).toBe(0);
     expect(data.grid.name).toBe("Configured Shore");
     expect(data.battery.name).toBe("Configured House Battery");
     expect(data.home.name).toBe("Configured RV Loads");
     expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalled();
   });
 
-  test("classic RV fallback derives display values from available source and net power", () => {
+  test("classic RV fallback does not replace missing charger output with shore power", () => {
     const config = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
@@ -278,11 +278,11 @@ describe("_computeRenderData", () => {
       })
     )._computeRenderData();
 
-    expect(data.grid.state.toBattery).toBe(114);
+    expect(data.grid.state.toBattery).toBe(0);
     expect(data.solar.state.toBattery).toBe(0);
-    expect(data.battery.state.toBattery).toBe(114);
-    expect(data.battery.state.fromBattery).toBe(114);
-    expect(data.battery.state.toHome).toBe(114);
+    expect(data.battery.state.toBattery).toBe(0);
+    expect(data.battery.state.fromBattery).toBe(0);
+    expect(data.battery.state.toHome).toBe(0);
     expect(data.grid.state.toHome).toBe(0);
     expect(data.solar.state.toHome).toBe(0);
   });
@@ -311,7 +311,7 @@ describe("_computeRenderData", () => {
     const data = makeCard(
       config,
       makeHass({
-        "sensor.shore": "218",
+        "sensor.shore": "220",
         "sensor.solar": "0",
         "sensor.legacy_battery": "0",
         "sensor.ac_output_power": "204",
@@ -320,16 +320,44 @@ describe("_computeRenderData", () => {
         "sensor.ac_state": "1",
         "sensor.solar_output_power": "0",
         "sensor.booster_output_power": "0",
-        "sensor.cabin_battery_net_power": "159",
+        "sensor.cabin_battery_net_power": "102",
       })
     )._computeRenderData();
 
-    expect(data.grid.state.fromGrid).toBe(218);
+    expect(data.grid.state.fromGrid).toBe(220);
     expect(data.grid.state.toBattery).toBe(204);
     expect(data.grid.state.toHome).toBe(0);
     expect(data.battery.state.toBattery).toBe(204);
-    expect(data.battery.state.fromBattery).toBe(45);
-    expect(data.battery.state.toHome).toBe(45);
+    expect(data.battery.state.fromBattery).toBe(102);
+    expect(data.battery.state.toHome).toBe(102);
+
+    const container = document.createElement("div");
+    renderTemplate(
+      flowElement(
+        config,
+        {
+          battery: data.battery,
+          grid: data.grid,
+          individual: [],
+          solar: data.solar,
+          newDur: {
+            batteryGrid: 1,
+            batteryToHome: 1,
+            gridToHome: 1,
+            solarToBattery: 1,
+            solarToGrid: 1,
+            solarToHome: 1,
+            individual: [],
+            nonFossil: 1,
+          },
+        },
+        true
+      ),
+      container
+    );
+
+    expect(container.querySelector("#grid-home-flow")).toBeNull();
+    expect(container.querySelector("#battery-grid-flow")).not.toBeNull();
   });
 
   test("solar charger output is routed through the cabin battery", () => {

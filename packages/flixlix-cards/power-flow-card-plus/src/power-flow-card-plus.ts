@@ -971,13 +971,15 @@ export class PowerFlowCardPlus extends LitElement {
       }
       return (source.outputVoltage.state ?? 0) * (source.outputCurrent.state ?? 0);
     };
+    const hasLegacyAcChargerOutput =
+      this._config.rv?.house_battery?.charge !== undefined ||
+      (typeof entities.battery?.entity === "object" &&
+        entities.battery.entity.production !== undefined);
     const rvPower: RvPowerMeasurements | undefined = rvMode
       ? {
           acChargerOutput:
             getConfiguredOutput(rvData.acCharger) ??
-            (this._config.rv?.house_battery?.charge
-              ? rvData.houseBattery.charge.state
-              : grid.state.fromGrid),
+            (hasLegacyAcChargerOutput ? rvData.houseBattery.charge.state : 0),
           solarChargerOutput:
             getConfiguredOutput(rvData.solarCharger) ?? rvData.solar.state ?? solar.state.total,
           boosterOutput: getConfiguredOutput(rvData.booster) ?? rvData.orion.state ?? 0,

@@ -26,8 +26,10 @@ const gridToHomeDot = (
 
 export const flowGridToHome = (
   config: FlowCardPlusConfig,
-  { battery, grid, individual, solar, newDur }: Flows
+  { battery, grid, individual, solar, newDur }: Flows,
+  rvMode = config.rv_mode === true || config.main_config?.rv_mode === true
 ) => {
+  if (rvMode && !(grid.state.toHome > 0)) return nothing;
   const shouldShow = grid.has && showLine(config, grid.state.toHome) && !config.entities.home?.hide;
   if (!shouldShow) return nothing;
 
