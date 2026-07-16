@@ -10,8 +10,14 @@ vi.mock("@flixlix-cards/shared/utils/unavailable-error", () => ({
   unavailableOrMisconfiguredError: unavailableOrMisconfiguredErrorMock,
 }));
 
-import { type PowerFlowCardPlusConfig } from "@flixlix-cards/shared/types";
 import { flowElement } from "@flixlix-cards/shared/components/flows/index";
+import {
+  isConfiguredEntity,
+  resolveEntityPower,
+  resolveOptionalState,
+  resolveVoltageCurrentPower,
+} from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
+import { type PowerFlowCardPlusConfig } from "@flixlix-cards/shared/types";
 import { render as renderTemplate } from "lit";
 import { PowerFlowCardPlus } from "../src/power-flow-card-plus";
 
@@ -88,11 +94,19 @@ declare function computeRenderDataShape(): {
   home: { name: string };
   rvMode: boolean;
   rvData: {
-    shorePower: { entity?: string; state: number | null };
-    houseBattery: {
-      charge: { entity?: string; state: number | null };
-      discharge: { entity?: string; state: number | null };
+    rvMode: boolean;
+    shore: { has: boolean; inputPower: number; entity?: string };
+    acCharger: { has: boolean; outputPower: number };
+    solarCharger: { has: boolean; outputPower: number; state: string | null };
+    booster: { has: boolean; outputPower: number };
+    cabinBattery: {
+      has: boolean;
+      netPower: number;
+      measuredIn: number;
+      measuredOut: number;
     };
+    starterBattery: { has: boolean; voltage: number | null; power: number };
+    loads: { totalPower: number; acPower: number; dcPower: number };
   };
   individualObjs: Array<{ has: boolean; state: number | null }>;
 };
@@ -243,9 +257,9 @@ describe("_computeRenderData", () => {
 
     const data = makeCard(config, hass)._computeRenderData();
 
-    expect(data.rvData.shorePower.entity).toBe("sensor.shore");
-    expect(data.rvData.houseBattery.charge.entity).toBe("sensor.battery_charge");
-    expect(data.rvData.houseBattery.discharge.entity).toBeUndefined();
+    expect(data.rvData.shore.entity).toBe("sensor.shore");
+    expect(data.rvData.acCharger.outputPower).toBe(200);
+    expect(data.rvData.cabinBattery.netPower).toBe(200);
     expect(data.grid.state.toHome).toBe(0);
     expect(data.grid.state.toBattery).toBe(200);
     expect(data.battery.state.toBattery).toBe(200);
@@ -517,9 +531,156 @@ describe("_computeRenderData", () => {
     } as unknown as PowerFlowCardPlusConfig;
     const data = makeCard(config, makeHass({ "sensor.shore": "500" }))._computeRenderData();
 
-    expect(data.rvData.shorePower.entity).toBeUndefined();
-    expect(data.rvData.shorePower.state).toBeNull();
+    expect(data.rvData.shore.entity).toBe("sensor.shore");
+    expect(data.rvData.shore.inputPower).toBe(500);
     expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalledWith(undefined);
+  });
+
+  test("structured runtime data prefers power over voltage times current", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.classic_grid" } },
+      rv: {
+        ac_charger: {
+          output_power: "sensor.ac_power",
+          output_voltage: "sensor.ac_voltage",
+          output_current: "sensor.ac_current",
+        },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.ac_power": "204",
+        "sensor.ac_voltage": "20",
+        "sensor.ac_current": "20",
+        "sensor.classic_grid": "0",
+      })
+    )._computeRenderData();
+
+    expect(data.rvData.acCharger.has).toBe(true);
+    expect(data.rvData.acCharger.outputPower).toBe(204);
+  });
+
+  test("structured runtime data falls back to voltage times current", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.classic_grid" } },
+      rv: {
+        booster: {
+          output_voltage: "sensor.booster_voltage",
+          output_current: "sensor.booster_current",
+        },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.classic_grid": "0",
+        "sensor.booster_voltage": "15",
+        "sensor.booster_current": "20",
+      })
+    )._computeRenderData();
+
+    expect(data.rvData.booster.has).toBe(true);
+    expect(data.rvData.booster.outputPower).toBe(300);
+  });
+
+  test("unknown and unavailable structured values resolve safely", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.classic_grid" } },
+      rv: {
+        solar_charger: {
+          state: "sensor.solar_state",
+          output_power: "sensor.solar_power",
+        },
+        cabin_battery: { voltage: "sensor.battery_voltage" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.solar_state": "unknown",
+        "sensor.solar_power": "unavailable",
+        "sensor.battery_voltage": "undefined",
+        "sensor.classic_grid": "0",
+      })
+    )._computeRenderData();
+
+    expect(data.rvData.solarCharger.has).toBe(true);
+    expect(data.rvData.solarCharger.state).toBeNull();
+    expect(data.rvData.solarCharger.outputPower).toBe(0);
+    expect(data.rvData.cabinBattery.has).toBe(true);
+    expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalled();
+  });
+
+  test("a configured zero-watt entity keeps its runtime node present", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.classic_grid" } },
+      rv: { shore: { input_power: "sensor.shore_input" } },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({ "sensor.classic_grid": "0", "sensor.shore_input": "0" })
+    )._computeRenderData();
+
+    expect(data.rvData.shore.has).toBe(true);
+    expect(data.rvData.shore.inputPower).toBe(0);
+  });
+
+  test("new neutral fields override legacy and classic runtime values", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.classic_shore" },
+        solar: { entity: "sensor.classic_solar" },
+        home: { entity: "sensor.classic_load" },
+      },
+      rv: {
+        shore: { input_power: "sensor.neutral_shore" },
+        shore_power: { entity: "sensor.legacy_shore" },
+        solar_charger: { output_power: "sensor.neutral_solar" },
+        solar: { entity: "sensor.legacy_solar" },
+        loads: { total_power: "sensor.neutral_load" },
+        dc_load: { entity: "sensor.legacy_load" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.classic_shore": "100",
+        "sensor.legacy_shore": "200",
+        "sensor.neutral_shore": "300",
+        "sensor.classic_solar": "10",
+        "sensor.legacy_solar": "20",
+        "sensor.neutral_solar": "30",
+        "sensor.classic_load": "1",
+        "sensor.legacy_load": "2",
+        "sensor.neutral_load": "3",
+      })
+    )._computeRenderData();
+
+    expect(data.rvData.shore.inputPower).toBe(300);
+    expect(data.rvData.solarCharger.outputPower).toBe(30);
+    expect(data.rvData.loads.totalPower).toBe(3);
+  });
+
+  test("runtime helpers reject entity objects before any state read", () => {
+    const hass = makeHass({ "sensor.valid": "12" });
+    const entityObject = { entity: "sensor.valid" };
+
+    expect(isConfiguredEntity(entityObject)).toBe(false);
+    expect(resolveEntityPower(hass, entityObject)).toBeNull();
+    expect(resolveVoltageCurrentPower(hass, entityObject, "sensor.valid")).toBeNull();
+    expect(resolveOptionalState(hass, entityObject)).toBeNull();
+    expect(unavailableOrMisconfiguredErrorMock).not.toHaveBeenCalled();
   });
 
   test("case 1: grid-only consumption — fromGrid is the entity value and toHome follows", () => {

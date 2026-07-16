@@ -38,6 +38,11 @@ import {
   getNonFossilSecondaryState,
 } from "@flixlix-cards/shared/states/raw/non-fossil";
 import { getSolarSecondaryState, getSolarState } from "@flixlix-cards/shared/states/raw/solar";
+import {
+  getRvRuntimeData,
+  resolveEntityPower,
+  resolveOptionalNumber,
+} from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
 import { adjustZeroTolerance } from "@flixlix-cards/shared/states/tolerance/base";
 import { doesEntityExist } from "@flixlix-cards/shared/states/utils/existence-entity";
 import { getEntityState } from "@flixlix-cards/shared/states/utils/get-entity-state";
@@ -51,6 +56,7 @@ import {
   type NewDur,
   type PowerFlowCardPlusConfig,
   type RvConfig,
+  type RvRuntimeData,
   type TemplatesObj,
 } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
@@ -105,7 +111,7 @@ type RvRuntimeOutputSource = {
   state: RvRuntimeEntity;
 };
 
-type RvRuntimeData = {
+type LegacyRvRuntimeData = {
   shorePower: RvRuntimeEntity;
   houseBattery: {
     charge: RvRuntimeEntity;
@@ -603,7 +609,7 @@ export class PowerFlowCardPlus extends LitElement {
     rv: RvConfig | undefined,
     getPowerEntity: (entity?: string) => RvRuntimeEntity,
     getNumericEntity: (entity?: string) => RvRuntimeEntity
-  ): RvRuntimeData {
+  ): LegacyRvRuntimeData {
     const getOutputSource = (source: RvConfig["ac_charger"]): RvRuntimeOutputSource => ({
       outputPower: getPowerEntity(this._getEntityId(source?.output_power)),
       outputVoltage: getNumericEntity(this._getEntityId(source?.output_voltage)),
@@ -698,18 +704,19 @@ export class PowerFlowCardPlus extends LitElement {
     const { entities } = this._config;
     const rvMode = this._isRvModeEnabled();
     const rv = this._getRvConfigWithFallback(rvMode);
+    const rvData = getRvRuntimeData(this.hass, this._config, rvMode);
     const initialNumericState = null as null | number;
     const getRvPowerEntity = (entity?: string): RvRuntimeEntity => ({
       entity,
       has: entity !== undefined,
-      state: entity ? getEntityStateWatts(this.hass, entity) : initialNumericState,
+      state: entity ? (resolveEntityPower(this.hass, entity) ?? 0) : initialNumericState,
     });
     const getRvNumericEntity = (entity?: string): RvRuntimeEntity => ({
       entity,
       has: entity !== undefined,
-      state: entity ? getEntityState(this.hass, entity) : initialNumericState,
+      state: entity ? resolveOptionalNumber(this.hass, entity) : initialNumericState,
     });
-    const rvData: RvRuntimeData = this._computeRvData(
+    const legacyRvData: LegacyRvRuntimeData = this._computeRvData(
       rv,
       getRvPowerEntity,
       getRvNumericEntity
@@ -978,13 +985,15 @@ export class PowerFlowCardPlus extends LitElement {
     const rvPower: RvPowerMeasurements | undefined = rvMode
       ? {
           acChargerOutput:
-            getConfiguredOutput(rvData.acCharger) ??
-            (hasLegacyAcChargerOutput ? rvData.houseBattery.charge.state : 0),
+            getConfiguredOutput(legacyRvData.acCharger) ??
+            (hasLegacyAcChargerOutput ? legacyRvData.houseBattery.charge.state : 0),
           solarChargerOutput:
-            getConfiguredOutput(rvData.solarCharger) ?? rvData.solar.state ?? solar.state.total,
-          boosterOutput: getConfiguredOutput(rvData.booster) ?? rvData.orion.state ?? 0,
-          cabinBatteryNetPower: rvData.cabinBattery.netPower.has
-            ? rvData.cabinBattery.netPower.state
+            getConfiguredOutput(legacyRvData.solarCharger) ??
+            legacyRvData.solar.state ??
+            solar.state.total,
+          boosterOutput: getConfiguredOutput(legacyRvData.booster) ?? legacyRvData.orion.state ?? 0,
+          cabinBatteryNetPower: legacyRvData.cabinBattery.netPower.has
+            ? legacyRvData.cabinBattery.netPower.state
             : (battery.state.toBattery ?? 0) - (battery.state.fromBattery ?? 0),
         }
       : undefined;
