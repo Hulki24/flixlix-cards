@@ -33,4 +33,24 @@ export const rvStyles = css`
     width: 8px;
     height: 8px;
   }
+
+  path.rv-shore-dc-bus-path,
+  circle.rv-shore-dc-bus-dot {
+    stroke: var(--energy-grid-consumption-color, #488fc2);
+  }
+
+  circle.rv-shore-dc-bus-dot {
+    fill: var(--energy-grid-consumption-color, #488fc2);
+    stroke-width: 4;
+  }
+
+  path.rv-solar-dc-bus-path,
+  circle.rv-solar-dc-bus-dot {
+    stroke: var(--energy-solar-color, #ff9800);
+  }
+
+  circle.rv-solar-dc-bus-dot {
+    fill: var(--energy-solar-color, #ff9800);
+    stroke-width: 4;
+  }
 `;

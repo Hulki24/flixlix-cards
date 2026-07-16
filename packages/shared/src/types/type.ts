@@ -134,6 +134,8 @@ export type NewDur = {
   solarToHome: number;
   individual: number[];
   nonFossil: number;
+  shoreToDcBus?: number;
+  solarToDcBus?: number;
 };
 
 export type GridObject = {

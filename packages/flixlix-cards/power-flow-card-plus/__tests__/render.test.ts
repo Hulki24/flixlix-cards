@@ -146,13 +146,87 @@ describe("render", () => {
     expect(rendered).toBeTruthy();
   });
 
-  test("RV shore charging renders Grid to Battery without a Grid to Home flow", () => {
+  test("RV routes charger and solar outputs to the DC bus without direct source flows", () => {
     const config = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
       display_zero_lines: { mode: "hide" },
       entities: {
         grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.classic_solar" },
+        battery: { entity: "sensor.legacy_battery" },
+        home: { entity: "sensor.loads" },
+      },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        ac_charger: { output_power: "sensor.ac_output" },
+        solar_charger: { output_power: "sensor.solar_output" },
+        cabin_battery: { net_power: "sensor.battery_net" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { card, container } = renderCard(
+      config,
+      makeHass({
+        "sensor.shore": "220",
+        "sensor.ac_output": "204",
+        "sensor.classic_solar": "120",
+        "sensor.solar_output": "120",
+        "sensor.legacy_battery": "0",
+        "sensor.battery_net": "324",
+        "sensor.loads": "0",
+      }),
+      500
+    );
+    const data = card._computeRenderData();
+
+    expect(data.rvData.shore.inputPower).toBe(220);
+    expect(data.grid.state.fromGrid).toBe(220);
+    expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "204"
+    );
+    expect(container.querySelector("#rv-solar-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "120"
+    );
+    expect(container.querySelector("#battery-grid-flow")).toBeNull();
+    expect(container.querySelector("#grid-home-flow")).toBeNull();
+    expect(container.querySelector("#solar-battery-flow")).toBeNull();
+    expect(container.querySelector("#solar-home-flow")).toBeNull();
+  });
+
+  test("RV source flows suppress zero values even when zero-lines are enabled", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      display_zero_lines: { mode: "show" },
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.classic_solar" },
+      },
+      rv: {
+        ac_charger: { output_power: "sensor.ac_output" },
+        solar_charger: { output_power: "sensor.solar_output" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { container } = renderCard(
+      config,
+      makeHass({
+        "sensor.shore": "220",
+        "sensor.classic_solar": "0",
+        "sensor.ac_output": "0",
+        "sensor.solar_output": "0",
+      })
+    );
+
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+    expect(container.querySelector("#rv-solar-dc-bus-flow")).toBeNull();
+  });
+
+  test("house mode retains the existing source flow components", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      display_zero_lines: { mode: "hide" },
+      entities: {
+        grid: { entity: "sensor.grid" },
         solar: { entity: "sensor.solar" },
         battery: { entity: "sensor.battery" },
         home: {},
@@ -161,45 +235,41 @@ describe("render", () => {
     const container = document.createElement("div");
 
     renderTemplate(
-      flowElement(
-        config,
-        {
-          grid: {
-            has: true,
-            state: { fromGrid: 44, toGrid: 0, toBattery: 36, toHome: 0 },
-          },
-          battery: {
-            has: true,
-            state: { fromBattery: 0, toBattery: 36, toGrid: 0, toHome: 0 },
-          },
-          solar: {
-            has: true,
-            hasReturnToGrid: false,
-            state: { total: 1, toGrid: 0, toBattery: 1, toHome: 0 },
-          },
-          individual: [],
-          newDur: {
-            batteryGrid: 1,
-            batteryToHome: 1,
-            gridToHome: 1,
-            solarToBattery: 1,
-            solarToGrid: 1,
-            solarToHome: 1,
-            individual: [],
-            nonFossil: 1,
-          },
+      flowElement(config, {
+        grid: {
+          has: true,
+          state: { fromGrid: 44, toGrid: 0, toBattery: 36, toHome: 8 },
         },
-        true
-      ),
+        battery: {
+          has: true,
+          state: { fromBattery: 0, toBattery: 36, toGrid: 0, toHome: 0 },
+        },
+        solar: {
+          has: true,
+          hasReturnToGrid: false,
+          state: { total: 20, toGrid: 0, toBattery: 12, toHome: 8 },
+        },
+        individual: [],
+        newDur: {
+          batteryGrid: 1,
+          batteryToHome: 1,
+          gridToHome: 1,
+          solarToBattery: 1,
+          solarToGrid: 1,
+          solarToHome: 1,
+          individual: [],
+          nonFossil: 1,
+        },
+      }),
       container
     );
 
     expect(container.querySelector("#battery-grid-flow")).not.toBeNull();
-    expect(container.querySelector("#grid-home-flow")).toBeNull();
-    expect(
-      container.querySelector("circle.battery-from-grid animateMotion")?.getAttribute("keyPoints")
-    ).toBe("1;0");
-    expect(container.querySelector("circle.battery-to-grid")).toBeNull();
+    expect(container.querySelector("#grid-home-flow")).not.toBeNull();
+    expect(container.querySelector("#solar-battery-flow")).not.toBeNull();
+    expect(container.querySelector("#solar-home-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+    expect(container.querySelector("#rv-solar-dc-bus-flow")).toBeNull();
   });
 
   test("DC bus layout node is rendered only in RV mode", () => {
@@ -248,15 +318,19 @@ describe("render", () => {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
       entities: { grid: { entity: "sensor.grid" } },
+      rv: { ac_charger: { output_power: "sensor.ac_output" } },
     } as PowerFlowCardPlusConfig;
 
-    const { container } = renderCard(config, makeHass({ "sensor.grid": "0" }), 320);
+    const { container } = renderCard(
+      config,
+      makeHass({ "sensor.grid": "0", "sensor.ac_output": "10" }),
+      320
+    );
 
-    expect(
-      container.querySelector("#rv-dc-bus .rv-dc-bus-node--narrow")
-    ).not.toBeNull();
+    expect(container.querySelector("#rv-dc-bus .rv-dc-bus-node--narrow")).not.toBeNull();
     expect(container.querySelector(".circle-container.grid .circle")).not.toBeNull();
     expect(container.querySelector("#home-circle")).not.toBeNull();
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
   });
 });
 
@@ -425,6 +499,7 @@ describe("_computeRenderData", () => {
           grid: data.grid,
           individual: [],
           solar: data.solar,
+          rvData: data.rvData,
           newDur: {
             batteryGrid: 1,
             batteryToHome: 1,
@@ -434,6 +509,8 @@ describe("_computeRenderData", () => {
             solarToHome: 1,
             individual: [],
             nonFossil: 1,
+            shoreToDcBus: 1,
+            solarToDcBus: 1,
           },
         },
         true
@@ -442,7 +519,10 @@ describe("_computeRenderData", () => {
     );
 
     expect(container.querySelector("#grid-home-flow")).toBeNull();
-    expect(container.querySelector("#battery-grid-flow")).not.toBeNull();
+    expect(container.querySelector("#battery-grid-flow")).toBeNull();
+    expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "204"
+    );
   });
 
   test("solar charger output is routed through the cabin battery", () => {

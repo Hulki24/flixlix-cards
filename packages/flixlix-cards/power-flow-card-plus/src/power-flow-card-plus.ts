@@ -160,6 +160,8 @@ export class PowerFlowCardPlus extends LitElement {
   @query("#solar-battery-flow") solarToBatteryFlow?: SVGSVGElement;
   @query("#solar-grid-flow") solarToGridFlow?: SVGSVGElement;
   @query("#solar-home-flow") solarToHomeFlow?: SVGSVGElement;
+  @query("#rv-shore-dc-bus-flow") shoreToDcBusFlow?: SVGSVGElement;
+  @query("#rv-solar-dc-bus-flow") solarToDcBusFlow?: SVGSVGElement;
   private _renderData?:
     | {
         entities: PowerFlowCardPlusConfig["entities"];
@@ -552,6 +554,7 @@ export class PowerFlowCardPlus extends LitElement {
               individual: individualObjs,
               newDur,
               solar,
+              rvData: data.rvData,
             },
             rvMode
           )}
@@ -745,11 +748,13 @@ export class PowerFlowCardPlus extends LitElement {
 
     const grid: GridObject = {
       entity: entities.grid?.entity,
-      has: entities?.grid?.entity !== undefined,
+      has: rvMode ? rvData.shore.has : entities?.grid?.entity !== undefined,
       hasReturnToGrid:
         typeof entities.grid?.entity === "string" || !!entities.grid?.entity?.production,
       state: {
-        fromGrid: getGridConsumptionState(this.hass, this._config),
+        fromGrid: rvMode
+          ? rvData.shore.inputPower
+          : getGridConsumptionState(this.hass, this._config),
         toGrid: getGridProductionState(this.hass, this._config),
         toBattery: initialNumericState,
         toHome: initialNumericState,
@@ -805,14 +810,16 @@ export class PowerFlowCardPlus extends LitElement {
         double_tap_action: entities.grid?.secondary_info?.double_tap_action,
       },
     };
-    const hasSolarEntity = entities.solar?.entity !== undefined;
-    const isProducingSolar = (getSolarState(this.hass, this._config) ?? 0) > 0;
+    const hasSolarEntity = rvMode ? rvData.solarCharger.has : entities.solar?.entity !== undefined;
+    const isProducingSolar = rvMode
+      ? rvData.solarCharger.outputPower > 0
+      : (getSolarState(this.hass, this._config) ?? 0) > 0;
     const displayZero = entities.solar?.display_zero !== false || isProducingSolar;
     const solar = {
       entity: entities.solar?.entity as string | undefined,
       has: hasSolarEntity && displayZero,
       state: {
-        total: getSolarState(this.hass, this._config),
+        total: rvMode ? rvData.solarCharger.outputPower : getSolarState(this.hass, this._config),
         toHome: initialNumericState,
         toGrid: initialNumericState,
         toBattery: initialNumericState,
@@ -1102,14 +1109,17 @@ export class PowerFlowCardPlus extends LitElement {
               unit: entities.home?.unit_of_measurement,
               unitWhiteSpace: entities.home?.unit_white_space,
             });
-    const totalLines =
-      (grid.state.toHome ?? 0) +
-      (solar.state.toHome ?? 0) +
-      (solar.state.toGrid ?? 0) +
-      (solar.state.toBattery ?? 0) +
-      (battery.state.toHome ?? 0) +
-      (grid.state.toBattery ?? 0) +
-      (battery.state.toGrid ?? 0);
+    const totalLines = rvMode
+      ? Math.max(rvData.acCharger.outputPower, 0) +
+        Math.max(rvData.solarCharger.outputPower, 0) +
+        Math.max(battery.state.toHome ?? 0, 0)
+      : (grid.state.toHome ?? 0) +
+        (solar.state.toHome ?? 0) +
+        (solar.state.toGrid ?? 0) +
+        (solar.state.toBattery ?? 0) +
+        (battery.state.toHome ?? 0) +
+        (grid.state.toBattery ?? 0) +
+        (battery.state.toGrid ?? 0);
     if (battery.state_of_charge.state === null) {
       battery.icon = "mdi:battery";
     } else if (battery.state_of_charge.state <= 72 && battery.state_of_charge.state > 44) {
@@ -1143,6 +1153,16 @@ export class PowerFlowCardPlus extends LitElement {
           computeFlowRate(this._config, individual.state ?? 0, totalIndividualConsumption)
         ) || [],
       nonFossil: computeFlowRate(this._config, nonFossil.state.power ?? 0, totalLines),
+      ...(rvMode
+        ? {
+            shoreToDcBus: computeFlowRate(this._config, rvData.acCharger.outputPower, totalLines),
+            solarToDcBus: computeFlowRate(
+              this._config,
+              rvData.solarCharger.outputPower,
+              totalLines
+            ),
+          }
+        : {}),
     };
     if (checkShouldShowDots(this._config)) {
       type AnimatedFlowName =
@@ -1151,16 +1171,22 @@ export class PowerFlowCardPlus extends LitElement {
         | "gridToHome"
         | "solarToBattery"
         | "solarToGrid"
-        | "solarToHome";
-      const flowNames: AnimatedFlowName[] = [
-        "batteryGrid",
-        "batteryToHome",
-        "gridToHome",
-        "solarToBattery",
-        "solarToGrid",
-        "solarToHome",
-      ];
+        | "solarToHome"
+        | "shoreToDcBus"
+        | "solarToDcBus";
+      const flowNames: AnimatedFlowName[] = rvMode
+        ? ["batteryToHome", "shoreToDcBus", "solarToDcBus"]
+        : [
+            "batteryGrid",
+            "batteryToHome",
+            "gridToHome",
+            "solarToBattery",
+            "solarToGrid",
+            "solarToHome",
+          ];
       flowNames.forEach((flowName) => {
+        const duration = newDur[flowName];
+        if (duration === undefined) return;
         const flowSVGElement = this[`${flowName}Flow`] as SVGSVGElement;
         if (
           flowSVGElement &&
@@ -1169,11 +1195,11 @@ export class PowerFlowCardPlus extends LitElement {
         ) {
           flowSVGElement.pauseAnimations();
           flowSVGElement.setCurrentTime(
-            flowSVGElement.getCurrentTime() * (newDur[flowName] / this.previousDur[flowName])
+            flowSVGElement.getCurrentTime() * (duration / this.previousDur[flowName])
           );
           flowSVGElement.unpauseAnimations();
         }
-        this.previousDur[flowName] = newDur[flowName];
+        this.previousDur[flowName] = duration;
       });
     } else {
       this.previousDur = {};
