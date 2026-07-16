@@ -1,10 +1,13 @@
 import { css } from "lit";
+import { rvStyles } from "./rv";
 
 export { allDynamicStyles } from "./all";
 export { computeColor } from "./colors";
 export { convertColorListToHex } from "./convert-color";
 
 export const styles = css`
+  ${rvStyles}
+
   :host {
     --size-circle-entity: 79.99px;
     --mdc-icon-size: 24px;

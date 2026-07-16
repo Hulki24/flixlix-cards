@@ -8,6 +8,7 @@ import { individualRightBottomElement } from "@flixlix-cards/shared/components/i
 import { individualRightTopElement } from "@flixlix-cards/shared/components/individual-right-top-element";
 import { dashboardLinkElement } from "@flixlix-cards/shared/components/misc/dashboard-link";
 import { nonFossilElement } from "@flixlix-cards/shared/components/non-fossil";
+import { dcBusElement } from "@flixlix-cards/shared/components/rv/dc-bus";
 import { solarElement } from "@flixlix-cards/shared/components/solar";
 import { spacer } from "@flixlix-cards/shared/components/spacer";
 import { CIRCLE_CIRCUMFERENCE } from "@flixlix-cards/shared/const/circle";
@@ -56,6 +57,7 @@ import {
   type NewDur,
   type PowerFlowCardPlusConfig,
   type RvConfig,
+  type RvDcBusRenderData,
   type RvRuntimeData,
   type TemplatesObj,
 } from "@flixlix-cards/shared/types";
@@ -167,6 +169,7 @@ export class PowerFlowCardPlus extends LitElement {
         home: any;
         rvMode: boolean;
         rvData: RvRuntimeData;
+        dcBus: RvDcBusRenderData;
         nonFossil: any;
         individualObjs: IndividualObject[];
         newDur: NewDur;
@@ -427,6 +430,7 @@ export class PowerFlowCardPlus extends LitElement {
       individualFieldRightTop,
       individualFieldRightBottom,
       rvMode,
+      dcBus,
     } = data;
     const getIndividualDisplayState = (field?: IndividualObject) => {
       if (!field) return "";
@@ -499,7 +503,7 @@ export class PowerFlowCardPlus extends LitElement {
                   templatesObj,
                 })
               : spacer}
-            ${spacer}
+            ${rvMode ? dcBusElement(dcBus) : spacer}
             ${!entities.home?.hide
               ? homeElement(this, this._config, {
                   CIRCLE_CIRCUMFERENCE,
@@ -705,6 +709,23 @@ export class PowerFlowCardPlus extends LitElement {
     const rvMode = this._isRvModeEnabled();
     const rv = this._getRvConfigWithFallback(rvMode);
     const rvData = getRvRuntimeData(this.hass, this._config, rvMode);
+    const dcBusActive = [
+      rvData.acCharger.outputPower,
+      rvData.solarCharger.outputPower,
+      rvData.booster.outputPower,
+      rvData.cabinBattery.measuredIn,
+      rvData.cabinBattery.measuredOut,
+      rvData.loads.totalPower,
+      rvData.loads.acPower,
+      rvData.loads.dcPower,
+    ].some((value) => value !== 0);
+    const dcBus: RvDcBusRenderData = {
+      has: rvMode,
+      active: dcBusActive,
+      className: `rv-dc-bus-node${dcBusActive ? " rv-dc-bus-node--active" : ""}${
+        this._width <= 420 ? " rv-dc-bus-node--narrow" : ""
+      }`,
+    };
     const initialNumericState = null as null | number;
     const getRvPowerEntity = (entity?: string): RvRuntimeEntity => ({
       entity,
@@ -1243,6 +1264,7 @@ export class PowerFlowCardPlus extends LitElement {
       battery,
       rvMode,
       rvData,
+      dcBus,
       home,
       nonFossil,
       individualObjs: visibleIndividualObjects,

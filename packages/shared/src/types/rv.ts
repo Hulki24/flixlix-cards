@@ -45,6 +45,12 @@ export interface RvLoadsRuntimeData {
   dcPower: number;
 }
 
+export interface RvDcBusRenderData {
+  has: boolean;
+  active: boolean;
+  className: string;
+}
+
 /** Normalized RV measurements exposed to the render layer. */
 export interface RvRuntimeData {
   rvMode: boolean;

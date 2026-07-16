@@ -55,8 +55,21 @@ function makeCard(config: PowerFlowCardPlusConfig, hass: ReturnType<typeof makeH
   card.connectedCallback();
   return card as unknown as {
     render: () => unknown;
+    _width: number;
     _computeRenderData: () => ReturnType<typeof computeRenderDataShape>;
   };
+}
+
+function renderCard(
+  config: PowerFlowCardPlusConfig,
+  hass: ReturnType<typeof makeHass>,
+  width?: number
+) {
+  const card = makeCard(config, hass);
+  if (width !== undefined) card._width = width;
+  const container = document.createElement("div");
+  renderTemplate(card.render() as any, container);
+  return { card, container };
 }
 
 // Used only as a type reference — actual return shape is inferred from _computeRenderData
@@ -93,6 +106,7 @@ declare function computeRenderDataShape(): {
   };
   home: { name: string };
   rvMode: boolean;
+  dcBus: { has: boolean; active: boolean; className: string };
   rvData: {
     rvMode: boolean;
     shore: { has: boolean; inputPower: number; entity?: string };
@@ -186,6 +200,63 @@ describe("render", () => {
       container.querySelector("circle.battery-from-grid animateMotion")?.getAttribute("keyPoints")
     ).toBe("1;0");
     expect(container.querySelector("circle.battery-to-grid")).toBeNull();
+  });
+
+  test("DC bus layout node is rendered only in RV mode", () => {
+    const rvConfig = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.grid" } },
+    } as PowerFlowCardPlusConfig;
+    const homeConfig = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.grid" } },
+    } as PowerFlowCardPlusConfig;
+
+    const rv = renderCard(rvConfig, makeHass({ "sensor.grid": "0" }));
+    const home = renderCard(homeConfig, makeHass({ "sensor.grid": "0" }));
+
+    expect(rv.container.querySelector("#rv-dc-bus")).not.toBeNull();
+    expect(home.container.querySelector("#rv-dc-bus")).toBeNull();
+  });
+
+  test("configured zero-watt RV structure keeps an inactive DC bus node visible", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.grid" } },
+      rv: { shore: { input_power: "sensor.shore" } },
+    } as PowerFlowCardPlusConfig;
+    const { card, container } = renderCard(
+      config,
+      makeHass({ "sensor.grid": "0", "sensor.shore": "0" })
+    );
+    const data = card._computeRenderData();
+    const node = container.querySelector("#rv-dc-bus > span");
+
+    expect(data.dcBus).toEqual({
+      has: true,
+      active: false,
+      className: "rv-dc-bus-node rv-dc-bus-node--narrow",
+    });
+    expect(node).not.toBeNull();
+    expect(node?.getAttribute("data-active")).toBe("false");
+  });
+
+  test("narrow RV cards retain the DC bus node without render errors", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.grid" } },
+    } as PowerFlowCardPlusConfig;
+
+    const { container } = renderCard(config, makeHass({ "sensor.grid": "0" }), 320);
+
+    expect(
+      container.querySelector("#rv-dc-bus .rv-dc-bus-node--narrow")
+    ).not.toBeNull();
+    expect(container.querySelector(".circle-container.grid .circle")).not.toBeNull();
+    expect(container.querySelector("#home-circle")).not.toBeNull();
   });
 });
 
