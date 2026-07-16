@@ -53,4 +53,34 @@ export const rvStyles = css`
     fill: var(--energy-solar-color, #ff9800);
     stroke-width: 4;
   }
+
+  path.rv-dc-bus-to-cabin-battery-path,
+  circle.rv-dc-bus-to-cabin-battery-dot {
+    stroke: var(--energy-battery-in-color, #f06292);
+  }
+
+  circle.rv-dc-bus-to-cabin-battery-dot {
+    fill: var(--energy-battery-in-color, #f06292);
+    stroke-width: 4;
+  }
+
+  path.rv-cabin-battery-to-dc-bus-path,
+  circle.rv-cabin-battery-to-dc-bus-dot {
+    stroke: var(--energy-battery-out-color, #4db6ac);
+  }
+
+  circle.rv-cabin-battery-to-dc-bus-dot {
+    fill: var(--energy-battery-out-color, #4db6ac);
+    stroke-width: 4;
+  }
+
+  path.rv-dc-bus-to-rv-path,
+  circle.rv-dc-bus-to-rv-dot {
+    stroke: var(--energy-rv-load-color, var(--primary-color, #03a9f4));
+  }
+
+  circle.rv-dc-bus-to-rv-dot {
+    fill: var(--energy-rv-load-color, var(--primary-color, #03a9f4));
+    stroke-width: 4;
+  }
 `;

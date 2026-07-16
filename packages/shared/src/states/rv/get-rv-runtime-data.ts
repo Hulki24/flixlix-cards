@@ -96,6 +96,17 @@ function hasAnyConfiguredEntity(...entities: unknown[]): boolean {
   return entities.some(isConfiguredEntity);
 }
 
+export function normalizeRvBatteryFlows(measuredIn: number, measuredOut: number) {
+  const safeIn = Number.isFinite(measuredIn) ? Math.max(measuredIn, 0) : 0;
+  const safeOut = Number.isFinite(measuredOut) ? Math.max(measuredOut, 0) : 0;
+  const netPower = safeIn - safeOut;
+
+  return {
+    measuredIn: Math.max(netPower, 0),
+    measuredOut: Math.max(-netPower, 0),
+  };
+}
+
 export function getRvRuntimeData(
   hass: HomeAssistant,
   config: PowerFlowCardPlusConfig,
@@ -146,9 +157,41 @@ export function getRvRuntimeData(
   const ac = rv?.ac_charger;
   const solar = rv?.solar_charger;
   const booster = rv?.booster;
+  const acChargerOutput = resolvePowerWithFallback(
+    hass,
+    firstConfiguredEntity(ac?.output_power, legacyChargeEntity),
+    ac?.output_voltage,
+    ac?.output_current
+  );
+  const solarChargerOutput = resolvePowerWithFallback(
+    hass,
+    solarOutputEntity,
+    solar?.output_voltage,
+    solar?.output_current
+  );
+  const boosterOutput = resolvePowerWithFallback(
+    hass,
+    boosterOutputEntity,
+    booster?.output_voltage,
+    booster?.output_current
+  );
+  const batteryFlows = normalizeRvBatteryFlows(Math.max(netPower, 0), Math.max(-netPower, 0));
+  const dcPowerConfigured = isConfiguredEntity(dcLoadEntity);
+  const dcPower = resolveEntityPower(hass, dcLoadEntity) ?? 0;
+  const rvDcConsumption = dcPowerConfigured
+    ? Math.max(dcPower, 0)
+    : Math.max(
+        acChargerOutput +
+          solarChargerOutput +
+          boosterOutput +
+          batteryFlows.measuredOut -
+          batteryFlows.measuredIn,
+        0
+      );
 
   return {
     rvMode,
+    rvDcConsumption,
     shore: {
       has: isConfiguredEntity(shoreEntity),
       inputPower: resolveEntityPower(hass, shoreEntity) ?? 0,
@@ -172,12 +215,7 @@ export function getRvRuntimeData(
         ac?.input_voltage,
         ac?.input_current
       ),
-      outputPower: resolvePowerWithFallback(
-        hass,
-        firstConfiguredEntity(ac?.output_power, legacyChargeEntity),
-        ac?.output_voltage,
-        ac?.output_current
-      ),
+      outputPower: acChargerOutput,
       inputVoltage: resolveOptionalNumber(hass, ac?.input_voltage),
       inputCurrent: resolveOptionalNumber(hass, ac?.input_current),
       outputVoltage: resolveOptionalNumber(hass, ac?.output_voltage),
@@ -191,12 +229,7 @@ export function getRvRuntimeData(
         solar?.output_current
       ),
       state: resolveOptionalState(hass, solar?.state),
-      outputPower: resolvePowerWithFallback(
-        hass,
-        solarOutputEntity,
-        solar?.output_voltage,
-        solar?.output_current
-      ),
+      outputPower: solarChargerOutput,
       outputVoltage: resolveOptionalNumber(hass, solar?.output_voltage),
       outputCurrent: resolveOptionalNumber(hass, solar?.output_current),
     },
@@ -217,12 +250,7 @@ export function getRvRuntimeData(
         booster?.input_voltage,
         booster?.input_current
       ),
-      outputPower: resolvePowerWithFallback(
-        hass,
-        boosterOutputEntity,
-        booster?.output_voltage,
-        booster?.output_current
-      ),
+      outputPower: boosterOutput,
       inputVoltage: resolveOptionalNumber(hass, booster?.input_voltage),
       inputCurrent: resolveOptionalNumber(hass, booster?.input_current),
       outputVoltage: resolveOptionalNumber(hass, booster?.output_voltage),
@@ -239,8 +267,8 @@ export function getRvRuntimeData(
         cabinStateOfChargeEntity
       ),
       netPower,
-      measuredIn: Math.max(netPower, 0),
-      measuredOut: Math.max(-netPower, 0),
+      measuredIn: batteryFlows.measuredIn,
+      measuredOut: batteryFlows.measuredOut,
       voltage: resolveOptionalNumber(hass, rv?.cabin_battery?.voltage),
       stateOfCharge: resolveOptionalNumber(hass, cabinStateOfChargeEntity),
       chargingState: resolveOptionalState(hass, rv?.cabin_battery?.charging_state),
@@ -257,7 +285,8 @@ export function getRvRuntimeData(
     loads: {
       totalPower: resolveEntityPower(hass, totalLoadEntity) ?? 0,
       acPower: resolveEntityPower(hass, acLoadEntity) ?? 0,
-      dcPower: resolveEntityPower(hass, dcLoadEntity) ?? 0,
+      dcPower,
+      dcPowerConfigured,
     },
   };
 }

@@ -8,6 +8,9 @@ import { html } from "lit";
 import { flowBatteryToGrid } from "./battery-to-grid";
 import { flowBatteryToHome } from "./battery-to-home";
 import { flowGridToHome } from "./grid-to-home";
+import { flowCabinBatteryToDcBus } from "./rv/cabin-battery-to-dc-bus";
+import { flowDcBusToCabinBattery } from "./rv/dc-bus-to-cabin-battery";
+import { flowDcBusToRv } from "./rv/dc-bus-to-rv";
 import { flowShoreToDcBus } from "./rv/shore-to-dc-bus";
 import { flowSolarToDcBus } from "./rv/solar-to-dc-bus";
 import { flowSolarToGrid } from "./solar-to-grid";
@@ -32,9 +35,11 @@ export const flowElement = (
     return html`
       ${rvData
         ? html`${flowShoreToDcBus(config, { battery, individual, newDur, rvData, solar })}
-          ${flowSolarToDcBus(config, { battery, individual, newDur, rvData })}`
+          ${flowSolarToDcBus(config, { battery, individual, newDur, rvData })}
+          ${flowDcBusToCabinBattery(config, { battery, individual, newDur, rvData })}
+          ${flowCabinBatteryToDcBus(config, { battery, individual, newDur, rvData })}
+          ${flowDcBusToRv(config, { battery, individual, newDur, rvData, solar })}`
         : ""}
-      ${flowBatteryToHome(config, { battery, grid, individual, newDur })}
     `;
   }
 

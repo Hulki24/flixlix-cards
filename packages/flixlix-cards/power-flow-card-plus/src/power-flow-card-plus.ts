@@ -162,6 +162,9 @@ export class PowerFlowCardPlus extends LitElement {
   @query("#solar-home-flow") solarToHomeFlow?: SVGSVGElement;
   @query("#rv-shore-dc-bus-flow") shoreToDcBusFlow?: SVGSVGElement;
   @query("#rv-solar-dc-bus-flow") solarToDcBusFlow?: SVGSVGElement;
+  @query("#rv-dc-bus-to-cabin-battery-flow") dcBusToCabinBatteryFlow?: SVGSVGElement;
+  @query("#rv-cabin-battery-to-dc-bus-flow") cabinBatteryToDcBusFlow?: SVGSVGElement;
+  @query("#rv-dc-bus-to-rv-flow") dcBusToRvFlow?: SVGSVGElement;
   private _renderData?:
     | {
         entities: PowerFlowCardPlusConfig["entities"];
@@ -721,6 +724,7 @@ export class PowerFlowCardPlus extends LitElement {
       rvData.loads.totalPower,
       rvData.loads.acPower,
       rvData.loads.dcPower,
+      rvData.rvDcConsumption,
     ].some((value) => value !== 0);
     const dcBus: RvDcBusRenderData = {
       has: rvMode,
@@ -856,7 +860,7 @@ export class PowerFlowCardPlus extends LitElement {
     };
     const battery = {
       entity: entities.battery?.entity,
-      has: checkIfHasBattery(),
+      has: rvMode ? rvData.cabinBattery.has : checkIfHasBattery(),
       mainEntity:
         typeof entities.battery?.entity === "object"
           ? entities.battery.entity.consumption
@@ -874,8 +878,12 @@ export class PowerFlowCardPlus extends LitElement {
         decimals: entities?.battery?.state_of_charge_decimals || 0,
       },
       state: {
-        toBattery: getBatteryInState(this.hass, this._config),
-        fromBattery: getBatteryOutState(this.hass, this._config),
+        toBattery: rvMode
+          ? rvData.cabinBattery.measuredIn
+          : getBatteryInState(this.hass, this._config),
+        fromBattery: rvMode
+          ? rvData.cabinBattery.measuredOut
+          : getBatteryOutState(this.hass, this._config),
         toGrid: 0,
         toHome: 0,
       },
@@ -1041,6 +1049,12 @@ export class PowerFlowCardPlus extends LitElement {
       getEntityStateWatts: (entityId) => getEntityStateWatts(this.hass, entityId),
       getEntityState: (entityId) => getEntityState(this.hass, entityId),
     });
+    if (rvMode) {
+      battery.state.toBattery = rvData.cabinBattery.measuredIn;
+      battery.state.fromBattery = rvData.cabinBattery.measuredOut;
+      battery.state.toGrid = 0;
+      battery.state.toHome = 0;
+    }
     if (!grid.has) {
       grid.state.fromGrid = 0;
       grid.state.toGrid = 0;
@@ -1054,10 +1068,12 @@ export class PowerFlowCardPlus extends LitElement {
     }
     const totalIndividualConsumption =
       individualObjs?.reduce((a, b) => a + (b.has ? b.state || 0 : 0), 0) || 0;
-    const totalHomeConsumption = Math.max(
-      (grid.state.toHome ?? 0) + (solar.state.toHome ?? 0) + (battery.state.toHome ?? 0),
-      0
-    );
+    const totalHomeConsumption = rvMode
+      ? rvData.rvDcConsumption
+      : Math.max(
+          (grid.state.toHome ?? 0) + (solar.state.toHome ?? 0) + (battery.state.toHome ?? 0),
+          0
+        );
     const homeBatteryCircumference = battery.state.toHome
       ? CIRCLE_CIRCUMFERENCE * (battery.state.toHome / totalHomeConsumption)
       : 0;
@@ -1067,15 +1083,20 @@ export class PowerFlowCardPlus extends LitElement {
     const homeNonFossilCircumference = nonFossil.state.power
       ? CIRCLE_CIRCUMFERENCE * (nonFossil.state.power / totalHomeConsumption)
       : 0;
-    const homeGridCircumference =
-      CIRCLE_CIRCUMFERENCE *
-      ((totalHomeConsumption -
-        (nonFossil.state.power ?? 0) -
-        (battery.state.toHome ?? 0) -
-        (solar.state.toHome ?? 0)) /
-        totalHomeConsumption);
-    const homeUsageToDisplay =
-      entities.home?.override_state && entities.home.entity
+    const homeGridCircumference = rvMode
+      ? 0
+      : CIRCLE_CIRCUMFERENCE *
+        ((totalHomeConsumption -
+          (nonFossil.state.power ?? 0) -
+          (battery.state.toHome ?? 0) -
+          (solar.state.toHome ?? 0)) /
+          totalHomeConsumption);
+    const homeUsageToDisplay = rvMode
+      ? displayValue(this.hass, this._config, rvData.rvDcConsumption, {
+          unit: entities.home?.unit_of_measurement,
+          unitWhiteSpace: entities.home?.unit_white_space,
+        })
+      : entities.home?.override_state && entities.home.entity
         ? entities.home?.subtract_individual
           ? displayValue(
               this.hass,
@@ -1112,7 +1133,9 @@ export class PowerFlowCardPlus extends LitElement {
     const totalLines = rvMode
       ? Math.max(rvData.acCharger.outputPower, 0) +
         Math.max(rvData.solarCharger.outputPower, 0) +
-        Math.max(battery.state.toHome ?? 0, 0)
+        Math.max(rvData.cabinBattery.measuredIn, 0) +
+        Math.max(rvData.cabinBattery.measuredOut, 0) +
+        Math.max(rvData.rvDcConsumption, 0)
       : (grid.state.toHome ?? 0) +
         (solar.state.toHome ?? 0) +
         (solar.state.toGrid ?? 0) +
@@ -1161,6 +1184,17 @@ export class PowerFlowCardPlus extends LitElement {
               rvData.solarCharger.outputPower,
               totalLines
             ),
+            dcBusToCabinBattery: computeFlowRate(
+              this._config,
+              rvData.cabinBattery.measuredIn,
+              totalLines
+            ),
+            cabinBatteryToDcBus: computeFlowRate(
+              this._config,
+              rvData.cabinBattery.measuredOut,
+              totalLines
+            ),
+            dcBusToRv: computeFlowRate(this._config, rvData.rvDcConsumption, totalLines),
           }
         : {}),
     };
@@ -1173,9 +1207,18 @@ export class PowerFlowCardPlus extends LitElement {
         | "solarToGrid"
         | "solarToHome"
         | "shoreToDcBus"
-        | "solarToDcBus";
+        | "solarToDcBus"
+        | "dcBusToCabinBattery"
+        | "cabinBatteryToDcBus"
+        | "dcBusToRv";
       const flowNames: AnimatedFlowName[] = rvMode
-        ? ["batteryToHome", "shoreToDcBus", "solarToDcBus"]
+        ? [
+            "shoreToDcBus",
+            "solarToDcBus",
+            "dcBusToCabinBattery",
+            "cabinBatteryToDcBus",
+            "dcBusToRv",
+          ]
         : [
             "batteryGrid",
             "batteryToHome",

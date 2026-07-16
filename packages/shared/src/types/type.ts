@@ -136,6 +136,9 @@ export type NewDur = {
   nonFossil: number;
   shoreToDcBus?: number;
   solarToDcBus?: number;
+  dcBusToCabinBattery?: number;
+  cabinBatteryToDcBus?: number;
+  dcBusToRv?: number;
 };
 
 export type GridObject = {

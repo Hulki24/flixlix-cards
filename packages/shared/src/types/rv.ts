@@ -43,6 +43,7 @@ export interface RvLoadsRuntimeData {
   totalPower: number;
   acPower: number;
   dcPower: number;
+  dcPowerConfigured: boolean;
 }
 
 export interface RvDcBusRenderData {
@@ -54,6 +55,7 @@ export interface RvDcBusRenderData {
 /** Normalized RV measurements exposed to the render layer. */
 export interface RvRuntimeData {
   rvMode: boolean;
+  rvDcConsumption: number;
   shore: RvShoreRuntimeData;
   acCharger: RvChargerRuntimeData;
   solarCharger: RvSolarChargerRuntimeData;
