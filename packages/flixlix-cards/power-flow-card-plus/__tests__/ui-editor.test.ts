@@ -362,6 +362,40 @@ describe("power flow ui editor", () => {
     await expect(editor.setConfig(config)).resolves.toBeUndefined();
   });
 
+  test("opening and rendering legacy RV config does not mutate or emit migration", async () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      main_config: { rv_mode: true },
+      entities: { grid: { entity: "sensor.shore" } },
+      rv: {
+        shore_power: { entity: "sensor.shore" },
+        house_battery: { charge: "sensor.charge", discharge: "sensor.discharge" },
+        orion: { entity: "sensor.booster" },
+      },
+    };
+    const original = structuredClone(config);
+    const { editor } = await renderEditor(config);
+    const configChanged = vi.fn();
+    editor.addEventListener("config-changed", configChanged);
+
+    renderTemplate((editor as any).render(), document.createElement("div"));
+
+    expect((editor as any)._config).toEqual(original);
+    expect(config).toEqual(original);
+    expect(configChanged).not.toHaveBeenCalled();
+  });
+
+  test("explicit top-level false hides a legacy-enabled RV editor without RV config", async () => {
+    const { container } = await renderEditor({
+      type: "custom:power-flow-card-plus",
+      rv_mode: false,
+      main_config: { rv_mode: true },
+      entities: { grid: { entity: "sensor.grid" } },
+    });
+
+    expect(container.querySelector('link-subpage[path="rv"]')).toBeNull();
+  });
+
   test("valueChanged preserves RV mode as a top-level boolean", () => {
     const editor = new PowerFlowCardPlusEditor();
     const configChanged = vi.fn();

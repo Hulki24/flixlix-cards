@@ -14,6 +14,7 @@ import { homeSchema } from "@flixlix-cards/shared/ui-editor/schema/home";
 import { solarSchema } from "@flixlix-cards/shared/ui-editor/schema/solar";
 import { loadHaForm } from "@flixlix-cards/shared/ui-editor/utils/load-ha-form";
 import { defaultValues } from "@flixlix-cards/shared/utils/get-default-config";
+import { resolveRvMode } from "@flixlix-cards/shared/utils/resolve-rv-mode";
 import { fireEvent, type HomeAssistant, type LovelaceCardEditor } from "custom-card-helpers";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -109,11 +110,7 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
   }
 
   private _shouldShowRvEditor(): boolean {
-    return (
-      this._config?.rv_mode === true ||
-      this._config?.main_config?.rv_mode === true ||
-      this._config?.rv !== undefined
-    );
+    return !!this._config && (resolveRvMode(this._config) || this._config.rv !== undefined);
   }
 
   private _renderRvHelp() {

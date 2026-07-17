@@ -5,6 +5,7 @@ import {
   type RvRuntimeData,
 } from "@flixlix-cards/shared/types";
 import { html } from "lit";
+import { resolveRvMode } from "../../utils/resolve-rv-mode";
 import { flowBatteryToGrid } from "./battery-to-grid";
 import { flowBatteryToHome } from "./battery-to-home";
 import { flowGridToHome } from "./grid-to-home";
@@ -31,7 +32,7 @@ export interface Flows {
 export const flowElement = (
   config: FlowCardPlusConfig,
   { battery, grid, individual, solar, newDur, rvData }: Flows,
-  rvMode = config.rv_mode === true || config.main_config?.rv_mode === true
+  rvMode = resolveRvMode(config)
 ) => {
   if (rvMode) {
     return html`

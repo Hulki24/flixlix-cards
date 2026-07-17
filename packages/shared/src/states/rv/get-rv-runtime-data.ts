@@ -79,15 +79,33 @@ function classicEntity(
   return firstConfiguredEntity(combo.consumption, combo.production);
 }
 
-function resolvePowerWithFallback(
+function resolveFirstAvailablePower(hass: HomeAssistant, ...entities: unknown[]): number | null {
+  for (const entity of entities) {
+    const value = resolveEntityPower(hass, entity);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function resolveFirstAvailableNumber(hass: HomeAssistant, ...entities: unknown[]): number | null {
+  for (const entity of entities) {
+    const value = resolveOptionalNumber(hass, entity);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function resolveStructuredPowerWithFallback(
   hass: HomeAssistant,
   powerEntity: unknown,
-  voltageEntity?: unknown,
-  currentEntity?: unknown
+  voltageEntity: unknown,
+  currentEntity: unknown,
+  ...legacyEntities: unknown[]
 ): number {
   return (
     resolveEntityPower(hass, powerEntity) ??
     resolveVoltageCurrentPower(hass, voltageEntity, currentEntity) ??
+    resolveFirstAvailablePower(hass, ...legacyEntities) ??
     0
   );
 }
@@ -115,69 +133,71 @@ export function getRvRuntimeData(
   const rv: RvConfig | undefined = config.rv;
   const classic = config.entities;
 
-  const shoreEntity = firstConfiguredEntity(
+  const shoreEntities = [
     rv?.shore?.input_power,
     rv?.shore_power?.entity,
-    classicEntity(classic.grid?.entity, "consumption")
-  );
-  const legacyChargeEntity = firstConfiguredEntity(
+    classicEntity(classic.grid?.entity, "consumption"),
+  ];
+  const shoreEntity = firstConfiguredEntity(...shoreEntities);
+  const legacyChargeEntities = [
     rv?.house_battery?.charge,
-    classicEntity(classic.battery?.entity, "production")
-  );
-  const legacyDischargeEntity = firstConfiguredEntity(
+    classicEntity(classic.battery?.entity, "production"),
+  ];
+  const legacyDischargeEntities = [
     rv?.house_battery?.discharge,
-    classicEntity(classic.battery?.entity, "consumption")
-  );
-  const solarOutputEntity = firstConfiguredEntity(
-    rv?.solar_charger?.output_power,
-    rv?.solar?.entity,
-    classicEntity(classic.solar?.entity)
-  );
-  const boosterOutputEntity = firstConfiguredEntity(rv?.booster?.output_power, rv?.orion?.entity);
+    classicEntity(classic.battery?.entity, "consumption"),
+  ];
+  const legacyChargeEntity = firstConfiguredEntity(...legacyChargeEntities);
+  const legacyDischargeEntity = firstConfiguredEntity(...legacyDischargeEntities);
+  const legacySolarEntities = [rv?.solar?.entity, classicEntity(classic.solar?.entity)];
+  const legacyBoosterEntities = [rv?.orion?.entity];
   const cabinNetEntity = firstConfiguredEntity(rv?.cabin_battery?.net_power);
-  const cabinStateOfChargeEntity = firstConfiguredEntity(
+  const cabinStateOfChargeEntities = [
     rv?.cabin_battery?.state_of_charge,
     rv?.house_battery?.soc,
-    classic.battery?.state_of_charge
-  );
-  const totalLoadEntity = firstConfiguredEntity(
-    rv?.loads?.total_power,
-    rv?.dc_load?.entity,
-    classicEntity(classic.home?.entity)
-  );
-  const acLoadEntity = firstConfiguredEntity(rv?.loads?.ac_power, rv?.ac_load?.entity);
-  const dcLoadEntity = firstConfiguredEntity(rv?.loads?.dc_power, rv?.dc_load?.entity);
+    classic.battery?.state_of_charge,
+  ];
+  const cabinStateOfChargeEntity = firstConfiguredEntity(...cabinStateOfChargeEntities);
+  const legacyTotalLoadEntities = [rv?.dc_load?.entity, classicEntity(classic.home?.entity)];
+  const legacyAcLoadEntities = [rv?.ac_load?.entity];
+  const legacyDcLoadEntities = [rv?.dc_load?.entity];
 
-  const legacyCharge = resolveEntityPower(hass, legacyChargeEntity) ?? 0;
-  const legacyDischarge = resolveEntityPower(hass, legacyDischargeEntity) ?? 0;
-  const netPower = cabinNetEntity
-    ? (resolveEntityPower(hass, cabinNetEntity) ?? 0)
-    : legacyCharge - legacyDischarge;
+  const legacyCharge = resolveFirstAvailablePower(hass, ...legacyChargeEntities) ?? 0;
+  const legacyDischarge = resolveFirstAvailablePower(hass, ...legacyDischargeEntities) ?? 0;
+  const netPower = resolveEntityPower(hass, cabinNetEntity) ?? legacyCharge - legacyDischarge;
 
   const ac = rv?.ac_charger;
   const solar = rv?.solar_charger;
   const booster = rv?.booster;
-  const acChargerOutput = resolvePowerWithFallback(
+  const acChargerOutput = resolveStructuredPowerWithFallback(
     hass,
-    firstConfiguredEntity(ac?.output_power, legacyChargeEntity),
+    ac?.output_power,
     ac?.output_voltage,
-    ac?.output_current
+    ac?.output_current,
+    ...legacyChargeEntities
   );
-  const solarChargerOutput = resolvePowerWithFallback(
+  const solarChargerOutput = resolveStructuredPowerWithFallback(
     hass,
-    solarOutputEntity,
+    solar?.output_power,
     solar?.output_voltage,
-    solar?.output_current
+    solar?.output_current,
+    ...legacySolarEntities
   );
-  const boosterOutput = resolvePowerWithFallback(
+  const boosterOutput = resolveStructuredPowerWithFallback(
     hass,
-    boosterOutputEntity,
+    booster?.output_power,
     booster?.output_voltage,
-    booster?.output_current
+    booster?.output_current,
+    ...legacyBoosterEntities
   );
   const batteryFlows = normalizeRvBatteryFlows(Math.max(netPower, 0), Math.max(-netPower, 0));
-  const dcPowerConfigured = isConfiguredEntity(dcLoadEntity);
-  const dcPower = resolveEntityPower(hass, dcLoadEntity) ?? 0;
+  const totalPower =
+    resolveFirstAvailablePower(hass, rv?.loads?.total_power, ...legacyTotalLoadEntities) ?? 0;
+  const acPower =
+    resolveFirstAvailablePower(hass, rv?.loads?.ac_power, ...legacyAcLoadEntities) ?? 0;
+  const dcPowerCandidates = [rv?.loads?.dc_power, ...legacyDcLoadEntities];
+  const dcPowerConfigured = hasAnyConfiguredEntity(...dcPowerCandidates);
+  const dcPower = resolveFirstAvailablePower(hass, ...dcPowerCandidates) ?? 0;
   const rvDcConsumption = dcPowerConfigured
     ? Math.max(dcPower, 0)
     : Math.max(
@@ -194,7 +214,7 @@ export function getRvRuntimeData(
     rvDcConsumption,
     shore: {
       has: isConfiguredEntity(shoreEntity),
-      inputPower: resolveEntityPower(hass, shoreEntity) ?? 0,
+      inputPower: resolveFirstAvailablePower(hass, ...shoreEntities) ?? 0,
       entity: shoreEntity,
     },
     acCharger: {
@@ -209,7 +229,7 @@ export function getRvRuntimeData(
         legacyChargeEntity
       ),
       state: resolveOptionalState(hass, ac?.state),
-      inputPower: resolvePowerWithFallback(
+      inputPower: resolveStructuredPowerWithFallback(
         hass,
         ac?.input_power,
         ac?.input_voltage,
@@ -224,7 +244,8 @@ export function getRvRuntimeData(
     solarCharger: {
       has: hasAnyConfiguredEntity(
         solar?.state,
-        solarOutputEntity,
+        solar?.output_power,
+        ...legacySolarEntities,
         solar?.output_voltage,
         solar?.output_current
       ),
@@ -239,12 +260,13 @@ export function getRvRuntimeData(
         booster?.input_power,
         booster?.input_voltage,
         booster?.input_current,
-        boosterOutputEntity,
+        booster?.output_power,
+        ...legacyBoosterEntities,
         booster?.output_voltage,
         booster?.output_current
       ),
       state: resolveOptionalState(hass, booster?.state),
-      inputPower: resolvePowerWithFallback(
+      inputPower: resolveStructuredPowerWithFallback(
         hass,
         booster?.input_power,
         booster?.input_voltage,
@@ -270,7 +292,7 @@ export function getRvRuntimeData(
       measuredIn: batteryFlows.measuredIn,
       measuredOut: batteryFlows.measuredOut,
       voltage: resolveOptionalNumber(hass, rv?.cabin_battery?.voltage),
-      stateOfCharge: resolveOptionalNumber(hass, cabinStateOfChargeEntity),
+      stateOfCharge: resolveFirstAvailableNumber(hass, ...cabinStateOfChargeEntities),
       chargingState: resolveOptionalState(hass, rv?.cabin_battery?.charging_state),
     },
     starterBattery: {
@@ -283,8 +305,8 @@ export function getRvRuntimeData(
       power: resolveEntityPower(hass, rv?.starter_battery?.power) ?? 0,
     },
     loads: {
-      totalPower: resolveEntityPower(hass, totalLoadEntity) ?? 0,
-      acPower: resolveEntityPower(hass, acLoadEntity) ?? 0,
+      totalPower,
+      acPower,
       dcPower,
       dcPowerConfigured,
     },

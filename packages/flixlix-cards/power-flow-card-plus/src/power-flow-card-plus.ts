@@ -41,11 +41,7 @@ import {
   getNonFossilSecondaryState,
 } from "@flixlix-cards/shared/states/raw/non-fossil";
 import { getSolarSecondaryState, getSolarState } from "@flixlix-cards/shared/states/raw/solar";
-import {
-  getRvRuntimeData,
-  resolveEntityPower,
-  resolveOptionalNumber,
-} from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
+import { getRvRuntimeData } from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
 import { adjustZeroTolerance } from "@flixlix-cards/shared/states/tolerance/base";
 import { doesEntityExist } from "@flixlix-cards/shared/states/utils/existence-entity";
 import { getEntityState } from "@flixlix-cards/shared/states/utils/get-entity-state";
@@ -53,12 +49,10 @@ import { getEntityStateWatts } from "@flixlix-cards/shared/states/utils/get-enti
 import { allDynamicStyles, styles } from "@flixlix-cards/shared/style";
 import {
   type ActionConfigSet,
-  type ComboEntity,
   type GridObject,
   type HomeSources,
   type NewDur,
   type PowerFlowCardPlusConfig,
-  type RvConfig,
   type RvDcBusRenderData,
   type RvRuntimeData,
   type TemplatesObj,
@@ -82,6 +76,7 @@ import { type RvPowerMeasurements } from "@flixlix-cards/shared/utils/compute-rv
 import { displayValue } from "@flixlix-cards/shared/utils/display-value";
 import { defaultValues, getDefaultConfig } from "@flixlix-cards/shared/utils/get-default-config";
 import { registerCustomCard } from "@flixlix-cards/shared/utils/register-custom-card";
+import { resolveRvMode } from "@flixlix-cards/shared/utils/resolve-rv-mode";
 import { sortIndividualObjects } from "@flixlix-cards/shared/utils/sort-individual-objects";
 import { coerceNumber } from "@flixlix-cards/shared/utils/utils";
 import {
@@ -101,44 +96,6 @@ registerCustomCard({
     "An extended version of the power flow card with richer options, advanced features and a few small UI enhancements. Inspired by the Energy Dashboard.",
   version: packageJson.version,
 });
-
-type RvRuntimeEntity = {
-  entity?: string;
-  has: boolean;
-  state: number | null;
-};
-
-type RvRuntimeOutputSource = {
-  outputPower: RvRuntimeEntity;
-  outputVoltage: RvRuntimeEntity;
-  outputCurrent: RvRuntimeEntity;
-  state: RvRuntimeEntity;
-};
-
-type LegacyRvRuntimeData = {
-  shorePower: RvRuntimeEntity;
-  houseBattery: {
-    charge: RvRuntimeEntity;
-    discharge: RvRuntimeEntity;
-    soc: RvRuntimeEntity;
-  };
-  starterBattery: {
-    voltage: RvRuntimeEntity;
-    current: RvRuntimeEntity;
-    power: RvRuntimeEntity;
-  };
-  solar: RvRuntimeEntity;
-  acCharger: RvRuntimeOutputSource;
-  solarCharger: Pick<RvRuntimeOutputSource, "outputPower" | "state">;
-  booster: RvRuntimeOutputSource;
-  cabinBattery: {
-    netPower: RvRuntimeEntity;
-  };
-  acLoad: RvRuntimeEntity;
-  dcLoad: RvRuntimeEntity;
-  inverter: RvRuntimeEntity;
-  orion: RvRuntimeEntity;
-};
 
 @customElement("power-flow-card-plus")
 export class PowerFlowCardPlus extends LitElement {
@@ -625,105 +582,13 @@ export class PowerFlowCardPlus extends LitElement {
     }
   }
 
-  private _computeRvData(
-    rv: RvConfig | undefined,
-    getPowerEntity: (entity?: string) => RvRuntimeEntity,
-    getNumericEntity: (entity?: string) => RvRuntimeEntity
-  ): LegacyRvRuntimeData {
-    const getOutputSource = (source: RvConfig["ac_charger"]): RvRuntimeOutputSource => ({
-      outputPower: getPowerEntity(this._getEntityId(source?.output_power)),
-      outputVoltage: getNumericEntity(this._getEntityId(source?.output_voltage)),
-      outputCurrent: getNumericEntity(this._getEntityId(source?.output_current)),
-      state: getNumericEntity(this._getEntityId(source?.state)),
-    });
-
-    return {
-      shorePower: getPowerEntity(this._getEntityId(rv?.shore_power?.entity)),
-      houseBattery: {
-        charge: getPowerEntity(this._getEntityId(rv?.house_battery?.charge)),
-        discharge: getPowerEntity(this._getEntityId(rv?.house_battery?.discharge)),
-        soc: getNumericEntity(this._getEntityId(rv?.house_battery?.soc)),
-      },
-      starterBattery: {
-        voltage: getNumericEntity(this._getEntityId(rv?.starter_battery?.voltage)),
-        current: getNumericEntity(this._getEntityId(rv?.starter_battery?.current)),
-        power: getPowerEntity(this._getEntityId(rv?.starter_battery?.power)),
-      },
-      solar: getPowerEntity(this._getEntityId(rv?.solar?.entity)),
-      acCharger: getOutputSource(rv?.ac_charger),
-      solarCharger: {
-        outputPower: getPowerEntity(this._getEntityId(rv?.solar_charger?.output_power)),
-        state: getNumericEntity(this._getEntityId(rv?.solar_charger?.state)),
-      },
-      booster: getOutputSource(rv?.booster),
-      cabinBattery: {
-        netPower: getPowerEntity(this._getEntityId(rv?.cabin_battery?.net_power)),
-      },
-      acLoad: getPowerEntity(this._getEntityId(rv?.ac_load?.entity)),
-      dcLoad: getPowerEntity(this._getEntityId(rv?.dc_load?.entity)),
-      inverter: getPowerEntity(this._getEntityId(rv?.inverter?.entity)),
-      orion: getPowerEntity(this._getEntityId(rv?.orion?.entity)),
-    };
-  }
-
   private _isRvModeEnabled(): boolean {
-    return this._config.rv_mode === true || this._config.main_config?.rv_mode === true;
-  }
-
-  private _getEntityId(
-    entity: unknown,
-    direction: "consumption" | "production" | "any" = "any"
-  ): string | undefined {
-    const normalizeEntityId = (value: unknown): string | undefined => {
-      if (typeof value !== "string") return undefined;
-      const entityIds = value.split("|").map((id) => id.trim());
-      if (entityIds.length === 0 || entityIds.some((id) => !/^[a-z0-9_]+\.[a-z0-9_]+$/i.test(id))) {
-        return undefined;
-      }
-      return entityIds.join(" | ");
-    };
-
-    const directEntityId = normalizeEntityId(entity);
-    if (directEntityId) return directEntityId;
-    if (!entity || typeof entity !== "object") return undefined;
-
-    const comboEntity = entity as Partial<ComboEntity>;
-    if (direction === "consumption") return normalizeEntityId(comboEntity.consumption);
-    if (direction === "production") return normalizeEntityId(comboEntity.production);
-    return normalizeEntityId(comboEntity.consumption) ?? normalizeEntityId(comboEntity.production);
-  }
-
-  private _getRvConfigWithFallback(rvMode: boolean): RvConfig | undefined {
-    if (this._config.rv || !rvMode) return this._config.rv;
-
-    const { entities } = this._config;
-    const starterBattery = entities.individual?.[0]?.entity;
-
-    return {
-      shore_power: {
-        entity: this._getEntityId(entities.grid?.entity, "consumption"),
-      },
-      house_battery: {
-        charge: this._getEntityId(entities.battery?.entity, "production"),
-        discharge: this._getEntityId(entities.battery?.entity, "consumption"),
-        soc: entities.battery?.state_of_charge,
-      },
-      solar: {
-        entity: this._getEntityId(entities.solar?.entity),
-      },
-      ac_load: {
-        entity: this._getEntityId(entities.home?.entity),
-      },
-      starter_battery: {
-        power: starterBattery,
-      },
-    };
+    return resolveRvMode(this._config);
   }
 
   private _computeRenderData() {
     const { entities } = this._config;
     const rvMode = this._isRvModeEnabled();
-    const rv = this._getRvConfigWithFallback(rvMode);
     const rvData = getRvRuntimeData(this.hass, this._config, rvMode);
     const dcBusActive = [
       rvData.acCharger.outputPower,
@@ -744,22 +609,6 @@ export class PowerFlowCardPlus extends LitElement {
       }`,
     };
     const initialNumericState = null as null | number;
-    const getRvPowerEntity = (entity?: string): RvRuntimeEntity => ({
-      entity,
-      has: entity !== undefined,
-      state: entity ? (resolveEntityPower(this.hass, entity) ?? 0) : initialNumericState,
-    });
-    const getRvNumericEntity = (entity?: string): RvRuntimeEntity => ({
-      entity,
-      has: entity !== undefined,
-      state: entity ? resolveOptionalNumber(this.hass, entity) : initialNumericState,
-    });
-    const legacyRvData: LegacyRvRuntimeData = this._computeRvData(
-      rv,
-      getRvPowerEntity,
-      getRvNumericEntity
-    );
-
     const grid: GridObject = {
       entity: entities.grid?.entity,
       has: rvMode ? rvData.shore.has : entities?.grid?.entity !== undefined,
@@ -931,14 +780,31 @@ export class PowerFlowCardPlus extends LitElement {
         double_tap_action: entities.home?.secondary_info?.double_tap_action,
       },
     };
+    const structuredStarterEntities = new Set(
+      [
+        this._config.rv?.starter_battery?.voltage,
+        this._config.rv?.starter_battery?.power,
+        this._config.rv?.starter_battery?.current,
+      ].filter((entity): entity is string => typeof entity === "string")
+    );
     const individualObjs: IndividualObject[] =
-      entities.individual?.map((individual) =>
-        getIndividualObject({
-          hass: this.hass,
-          config: this._config,
-          field: individual,
-        })
-      ) || [];
+      entities.individual
+        ?.filter(
+          (individual) =>
+            !(
+              rvMode &&
+              rvData.starterBattery.has &&
+              (structuredStarterEntities.has(individual.entity) ||
+                /starter(?:\s|-)*(?:battery|batterie)/i.test(individual.name ?? ""))
+            )
+        )
+        .map((individual) =>
+          getIndividualObject({
+            hass: this.hass,
+            config: this._config,
+            field: individual,
+          })
+        ) || [];
     const nonFossil = {
       entity: entities.fossil_fuel_percentage?.entity,
       name: computeFieldName(
@@ -1015,32 +881,12 @@ export class PowerFlowCardPlus extends LitElement {
       battery.state.toGrid = 0;
       battery.state.toHome = 0;
     }
-    const getConfiguredOutput = (
-      source: RvRuntimeOutputSource | Pick<RvRuntimeOutputSource, "outputPower">
-    ): number | null => {
-      if (source.outputPower.has) return source.outputPower.state ?? 0;
-      if (!("outputVoltage" in source) || !source.outputVoltage.has || !source.outputCurrent.has) {
-        return null;
-      }
-      return (source.outputVoltage.state ?? 0) * (source.outputCurrent.state ?? 0);
-    };
-    const hasLegacyAcChargerOutput =
-      this._config.rv?.house_battery?.charge !== undefined ||
-      (typeof entities.battery?.entity === "object" &&
-        entities.battery.entity.production !== undefined);
     const rvPower: RvPowerMeasurements | undefined = rvMode
       ? {
-          acChargerOutput:
-            getConfiguredOutput(legacyRvData.acCharger) ??
-            (hasLegacyAcChargerOutput ? legacyRvData.houseBattery.charge.state : 0),
-          solarChargerOutput:
-            getConfiguredOutput(legacyRvData.solarCharger) ??
-            legacyRvData.solar.state ??
-            solar.state.total,
-          boosterOutput: getConfiguredOutput(legacyRvData.booster) ?? legacyRvData.orion.state ?? 0,
-          cabinBatteryNetPower: legacyRvData.cabinBattery.netPower.has
-            ? legacyRvData.cabinBattery.netPower.state
-            : (battery.state.toBattery ?? 0) - (battery.state.fromBattery ?? 0),
+          acChargerOutput: rvData.acCharger.outputPower,
+          solarChargerOutput: rvData.solarCharger.outputPower,
+          boosterOutput: rvData.booster.outputPower,
+          cabinBatteryNetPower: rvData.cabinBattery.netPower,
         }
       : undefined;
     computePowerDistributionAfterSolarAndBattery({

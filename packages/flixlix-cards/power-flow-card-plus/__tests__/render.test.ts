@@ -1167,6 +1167,184 @@ describe("_computeRenderData", () => {
     expect(data.rvData.loads.totalPower).toBe(3);
   });
 
+  test("an explicit top-level RV mode value has presence-based priority", () => {
+    const base = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.grid" } },
+    } as PowerFlowCardPlusConfig;
+    const hass = makeHass({ "sensor.grid": "0" });
+
+    expect(
+      makeCard(
+        { ...base, rv_mode: true, main_config: { rv_mode: false } },
+        hass
+      )._computeRenderData().rvMode
+    ).toBe(true);
+    expect(
+      makeCard(
+        { ...base, rv_mode: false, main_config: { rv_mode: true } },
+        hass
+      )._computeRenderData().rvMode
+    ).toBe(false);
+    expect(
+      makeCard({ ...base, main_config: { rv_mode: true } }, hass)._computeRenderData().rvMode
+    ).toBe(true);
+    expect(makeCard(base, hass)._computeRenderData().rvMode).toBe(false);
+  });
+
+  test("an explicit structured zero stops voltage-current and legacy fallbacks", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        battery: { entity: { production: "sensor.classic_charge" } },
+      },
+      rv: {
+        ac_charger: {
+          output_power: "sensor.structured_power",
+          output_voltage: "sensor.structured_voltage",
+          output_current: "sensor.structured_current",
+        },
+        house_battery: { charge: "sensor.legacy_charge" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { card, container } = renderCard(
+      config,
+      makeHass({
+        "sensor.shore": "220",
+        "sensor.structured_power": "0",
+        "sensor.structured_voltage": "20",
+        "sensor.structured_current": "10",
+        "sensor.legacy_charge": "150",
+        "sensor.classic_charge": "100",
+      })
+    );
+    const data = card._computeRenderData();
+
+    expect(data.rvData.acCharger.outputPower).toBe(0);
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+  });
+
+  test("unavailable structured values fall back without adding legacy sources", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.classic_shore" },
+        solar: { entity: "sensor.classic_solar" },
+      },
+      rv: {
+        shore: { input_power: "sensor.new_shore" },
+        shore_power: { entity: "sensor.legacy_shore" },
+        solar_charger: { output_power: "sensor.new_solar" },
+        solar: { entity: "sensor.legacy_solar" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const data = makeCard(
+      config,
+      makeHass({
+        "sensor.new_shore": "unavailable",
+        "sensor.legacy_shore": "220",
+        "sensor.classic_shore": "330",
+        "sensor.new_solar": "unknown",
+        "sensor.legacy_solar": "120",
+        "sensor.classic_solar": "80",
+      })
+    )._computeRenderData();
+
+    expect(data.rvData.shore.inputPower).toBe(220);
+    expect(data.rvData.solarCharger.outputPower).toBe(120);
+  });
+
+  test("legacy-only RV fields still produce normalized runtime data and bus flows", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      main_config: { rv_mode: true },
+      entities: {
+        grid: { entity: "sensor.classic_grid" },
+        solar: { entity: "sensor.classic_solar" },
+        battery: {
+          entity: {
+            production: "sensor.classic_charge",
+            consumption: "sensor.classic_discharge",
+          },
+        },
+      },
+      rv: {
+        shore_power: { entity: "sensor.legacy_shore" },
+        solar: { entity: "sensor.legacy_solar" },
+        house_battery: {
+          charge: "sensor.legacy_charge",
+          discharge: "sensor.legacy_discharge",
+        },
+        dc_load: { entity: "sensor.legacy_dc_load" },
+        ac_load: { entity: "sensor.legacy_ac_load" },
+        orion: { entity: "sensor.legacy_booster" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { card, container } = renderCard(
+      config,
+      makeHass({
+        "sensor.classic_grid": "900",
+        "sensor.classic_solar": "90",
+        "sensor.classic_charge": "80",
+        "sensor.classic_discharge": "10",
+        "sensor.legacy_shore": "220",
+        "sensor.legacy_solar": "120",
+        "sensor.legacy_charge": "100",
+        "sensor.legacy_discharge": "25",
+        "sensor.legacy_dc_load": "45",
+        "sensor.legacy_ac_load": "15",
+        "sensor.legacy_booster": "30",
+      })
+    );
+    const data = card._computeRenderData();
+
+    expect(data.rvData.shore.inputPower).toBe(220);
+    expect(data.rvData.acCharger.outputPower).toBe(100);
+    expect(data.rvData.solarCharger.outputPower).toBe(120);
+    expect(data.rvData.booster.outputPower).toBe(30);
+    expect(data.rvData.cabinBattery.netPower).toBe(75);
+    expect(data.rvData.loads.dcPower).toBe(45);
+    expect(data.rvData.loads.acPower).toBe(15);
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-solar-dc-bus-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-booster-to-dc-bus-flow")).not.toBeNull();
+    expect(container.querySelector("#grid-home-flow")).toBeNull();
+    expect(container.querySelector("#solar-home-flow")).toBeNull();
+  });
+
+  test("a structured starter suppresses only its matching legacy individual", () => {
+    const base = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.grid" },
+        individual: [
+          { entity: "sensor.starter_power", name: "Starter Battery" },
+          { entity: "sensor.fridge", name: "Fridge" },
+        ],
+      },
+    } as PowerFlowCardPlusConfig;
+    const hass = makeHass({
+      "sensor.grid": "0",
+      "sensor.starter_power": "25",
+      "sensor.fridge": "10",
+    });
+    const structured = makeCard(
+      { ...base, rv: { starter_battery: { power: "sensor.starter_power" } } },
+      hass
+    )._computeRenderData();
+    const legacyOnly = makeCard(base, hass)._computeRenderData();
+
+    expect(structured.rvData.starterBattery.has).toBe(true);
+    expect(structured.individualObjs).toHaveLength(1);
+    expect(structured.individualObjs[0]?.state).toBe(10);
+    expect(legacyOnly.rvData.starterBattery.has).toBe(false);
+    expect(legacyOnly.individualObjs).toHaveLength(2);
+  });
+
   test("runtime helpers reject entity objects before any state read", () => {
     const hass = makeHass({ "sensor.valid": "12" });
     const entityObject = { entity: "sensor.valid" };
