@@ -72,7 +72,6 @@ import {
   getTopRightIndividual,
 } from "@flixlix-cards/shared/utils/compute-individual-position";
 import { computePowerDistributionAfterSolarAndBattery } from "@flixlix-cards/shared/utils/compute-power-distribution";
-import { type RvPowerMeasurements } from "@flixlix-cards/shared/utils/compute-rv-power-distribution";
 import { displayValue } from "@flixlix-cards/shared/utils/display-value";
 import { defaultValues, getDefaultConfig } from "@flixlix-cards/shared/utils/get-default-config";
 import { registerCustomCard } from "@flixlix-cards/shared/utils/register-custom-card";
@@ -582,13 +581,9 @@ export class PowerFlowCardPlus extends LitElement {
     }
   }
 
-  private _isRvModeEnabled(): boolean {
-    return resolveRvMode(this._config);
-  }
-
   private _computeRenderData() {
     const { entities } = this._config;
-    const rvMode = this._isRvModeEnabled();
+    const rvMode = resolveRvMode(this._config);
     const rvData = getRvRuntimeData(this.hass, this._config, rvMode);
     const dcBusActive = [
       rvData.acCharger.outputPower,
@@ -881,35 +876,32 @@ export class PowerFlowCardPlus extends LitElement {
       battery.state.toGrid = 0;
       battery.state.toHome = 0;
     }
-    const rvPower: RvPowerMeasurements | undefined = rvMode
-      ? {
-          acChargerOutput: rvData.acCharger.outputPower,
-          solarChargerOutput: rvData.solarCharger.outputPower,
-          boosterOutput: rvData.booster.outputPower,
-          cabinBatteryNetPower: rvData.cabinBattery.netPower,
-        }
-      : undefined;
-    computePowerDistributionAfterSolarAndBattery({
-      rvMode,
-      rvPower,
-      entities: {
-        grid: entities.grid,
-        battery: entities.battery,
-        solar: entities.solar,
-        fossil_fuel_percentage: entities.fossil_fuel_percentage,
-      },
-      grid,
-      solar,
-      battery,
-      nonFossil,
-      getEntityStateWatts: (entityId) => getEntityStateWatts(this.hass, entityId),
-      getEntityState: (entityId) => getEntityState(this.hass, entityId),
-    });
     if (rvMode) {
+      grid.state.toGrid = 0;
+      grid.state.toBattery = 0;
+      grid.state.toHome = 0;
+      solar.state.toGrid = 0;
+      solar.state.toBattery = 0;
+      solar.state.toHome = 0;
       battery.state.toBattery = rvData.cabinBattery.measuredIn;
       battery.state.fromBattery = rvData.cabinBattery.measuredOut;
       battery.state.toGrid = 0;
       battery.state.toHome = 0;
+    } else {
+      computePowerDistributionAfterSolarAndBattery({
+        entities: {
+          grid: entities.grid,
+          battery: entities.battery,
+          solar: entities.solar,
+          fossil_fuel_percentage: entities.fossil_fuel_percentage,
+        },
+        grid,
+        solar,
+        battery,
+        nonFossil,
+        getEntityStateWatts: (entityId) => getEntityStateWatts(this.hass, entityId),
+        getEntityState: (entityId) => getEntityState(this.hass, entityId),
+      });
     }
     if (!grid.has) {
       grid.state.fromGrid = 0;

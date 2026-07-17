@@ -4,7 +4,6 @@ import {
   checkHasBottomIndividual,
   checkHasRightIndividual,
 } from "@flixlix-cards/shared/utils/compute-individual-position";
-import { resolveRvMode } from "@flixlix-cards/shared/utils/resolve-rv-mode";
 import { showLine } from "@flixlix-cards/shared/utils/show-line";
 import { styleLine } from "@flixlix-cards/shared/utils/style-line";
 import { html, nothing, svg } from "lit";
@@ -27,11 +26,8 @@ const solarToHomeDot = (
 
 export const flowSolarToHome = (
   config: FlowCardPlusConfig,
-  { battery, grid, individual, solar, newDur }: Flows,
-  rvMode = resolveRvMode(config)
+  { battery, grid, individual, solar, newDur }: Flows
 ) => {
-  if (rvMode) return nothing;
-
   const shouldShow =
     solar.has && showLine(config, solar.state.toHome || 0) && !config.entities.home?.hide;
   if (!shouldShow) return nothing;

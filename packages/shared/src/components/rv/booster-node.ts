@@ -2,7 +2,7 @@ import { type RvChargerRuntimeData } from "@flixlix-cards/shared/types";
 import { html, nothing, type TemplateResult } from "lit";
 import { classMap } from "lit/directives/class-map.js";
 
-export function isBoosterActive(booster: RvChargerRuntimeData): boolean {
+function isBoosterActive(booster: RvChargerRuntimeData): boolean {
   return Number.isFinite(booster.outputPower) && booster.outputPower > 0;
 }
 

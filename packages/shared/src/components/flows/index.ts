@@ -49,10 +49,10 @@ export const flowElement = (
   }
 
   return html`
-  ${flowSolarToHome(config, { battery, grid, individual, solar, newDur }, false)}
+  ${flowSolarToHome(config, { battery, grid, individual, solar, newDur })}
   ${flowSolarToGrid(config, { battery, grid, individual, solar, newDur })}
   ${flowSolarToBattery(config, { battery, individual, solar, newDur })}
-  ${flowGridToHome(config, { battery, grid, individual, solar, newDur }, false)}
+  ${flowGridToHome(config, { battery, grid, individual, solar, newDur })}
   ${flowBatteryToHome(config, { battery, grid, individual, newDur })}
   ${flowBatteryToGrid(config, { battery, grid, individual, newDur })}
 </div>`;

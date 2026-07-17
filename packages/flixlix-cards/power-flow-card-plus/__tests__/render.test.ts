@@ -441,6 +441,30 @@ describe("render", () => {
     );
   });
 
+  test("mixed RV sources balance only at the DC bus without classic direct flows", () => {
+    const { container, data } = renderRvFlowScenario({
+      acOutput: 204,
+      solarOutput: 120,
+      boosterInput: 320,
+      boosterOutput: 300,
+      starterVoltage: 13.4,
+      batteryNet: 500,
+    });
+
+    expect(data.rvData.rvDcConsumption).toBe(124);
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-solar-dc-bus-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-booster-to-dc-bus-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-dc-bus-to-cabin-battery-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")).toBe(
+      "124"
+    );
+    expect(container.querySelector("#grid-home-flow")).toBeNull();
+    expect(container.querySelector("#solar-battery-flow")).toBeNull();
+    expect(container.querySelector("#solar-home-flow")).toBeNull();
+    expect(container.querySelector("#battery-home-flow")).toBeNull();
+  });
+
   test("battery net zero sends charger output only from the DC bus to RV", () => {
     const { container, data } = renderRvFlowScenario({ acOutput: 100, batteryNet: 0 });
 
@@ -694,8 +718,8 @@ describe("_computeRenderData", () => {
 
       expect(data.rvMode).toBe(true);
       expect(data.grid.state.toHome).toBe(0);
-      expect(data.grid.state.toBattery).toBe(200);
-      expect(data.solar.state.toBattery).toBe(100);
+      expect(data.grid.state.toBattery).toBe(0);
+      expect(data.solar.state.toBattery).toBe(0);
       expect(data.solar.state.toHome).toBe(0);
       expect(data.battery.state.toBattery).toBe(200);
       expect(data.battery.state.fromBattery).toBe(0);
@@ -736,7 +760,7 @@ describe("_computeRenderData", () => {
     expect(data.rvData.acCharger.outputPower).toBe(200);
     expect(data.rvData.cabinBattery.netPower).toBe(200);
     expect(data.grid.state.toHome).toBe(0);
-    expect(data.grid.state.toBattery).toBe(200);
+    expect(data.grid.state.toBattery).toBe(0);
     expect(data.battery.state.toBattery).toBe(200);
     expect(data.battery.state.fromBattery).toBe(0);
     expect(data.battery.state.toHome).toBe(0);
@@ -814,7 +838,7 @@ describe("_computeRenderData", () => {
     )._computeRenderData();
 
     expect(data.grid.state.fromGrid).toBe(220);
-    expect(data.grid.state.toBattery).toBe(204);
+    expect(data.grid.state.toBattery).toBe(0);
     expect(data.grid.state.toHome).toBe(0);
     expect(data.battery.state.toBattery).toBe(102);
     expect(data.battery.state.fromBattery).toBe(0);
@@ -894,7 +918,7 @@ describe("_computeRenderData", () => {
       })
     )._computeRenderData();
 
-    expect(data.solar.state.toBattery).toBe(120);
+    expect(data.solar.state.toBattery).toBe(0);
     expect(data.solar.state.toHome).toBe(0);
     expect(data.battery.state.toBattery).toBe(70);
     expect(data.battery.state.fromBattery).toBe(0);

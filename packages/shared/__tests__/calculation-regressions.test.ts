@@ -3,55 +3,11 @@ import { computeNonFossilFromCollection } from "../src/states/utils/energy-perio
 import { computeEnergyDistribution } from "../src/utils/compute-energy-distribution";
 import { computeFlowRate } from "../src/utils/compute-flow-rate";
 import { computePowerDistributionAfterSolarAndBattery } from "../src/utils/compute-power-distribution";
-import { computeRvPowerDistribution } from "../src/utils/compute-rv-power-distribution";
 import { displayValue } from "../src/utils/display-value";
 
 const thinSpace = `\u2009`;
 
 describe("calculation regressions", () => {
-  test("computeRvPowerDistribution derives AC load from shore power and actual battery charging", () => {
-    const grid = {
-      state: { fromGrid: 500, toGrid: 25, toBattery: 0, toHome: 0 },
-    };
-    const solar = {
-      state: { total: 100, toHome: 0, toBattery: 0, toGrid: 20 },
-    };
-    const battery = {
-      state: { fromBattery: 0, toBattery: 200, toGrid: 10, toHome: 0 },
-    };
-
-    computeRvPowerDistribution({
-      entities: {},
-      grid,
-      solar,
-      battery,
-      nonFossil: {},
-      getEntityStateWatts: () => 0,
-      getEntityState: () => 0,
-    });
-
-    expect(grid.state.toHome).toBe(300);
-    expect(grid.state.toBattery).toBe(200);
-    expect(grid.state.toGrid).toBe(0);
-    expect(solar.state.toBattery).toBe(100);
-    expect(battery.state.toGrid).toBe(0);
-
-    grid.state.fromGrid = 150;
-    battery.state.toBattery = 200;
-    computeRvPowerDistribution({
-      entities: {},
-      grid,
-      solar,
-      battery,
-      nonFossil: {},
-      getEntityStateWatts: () => 0,
-      getEntityState: () => 0,
-    });
-
-    expect(grid.state.toHome).toBe(0);
-    expect(grid.state.toBattery).toBe(150);
-  });
-
   test("computeEnergyDistribution applies display zero tolerance to grid/battery exchange", () => {
     const grid = {
       icon: "grid",
