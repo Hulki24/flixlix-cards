@@ -74,8 +74,11 @@ function renderCard(
 }
 
 function renderRvFlowScenario({
+  shoreInput,
   acOutput = 0,
+  acState = "unknown",
   solarOutput = 0,
+  solarState = "unknown",
   batteryNet = 0,
   dcPower,
   boosterInput,
@@ -84,8 +87,11 @@ function renderRvFlowScenario({
   starterVoltage,
   starterPower,
 }: {
+  shoreInput?: number;
   acOutput?: number;
+  acState?: string;
   solarOutput?: number;
+  solarState?: string;
   batteryNet?: number;
   dcPower?: number;
   boosterInput?: number;
@@ -94,6 +100,7 @@ function renderRvFlowScenario({
   starterVoltage?: number;
   starterPower?: number;
 }) {
+  const resolvedShoreInput = shoreInput ?? Math.max(acOutput, 0);
   const boosterConfigured =
     boosterInput !== undefined || boosterOutput !== undefined || boosterState !== undefined;
   const starterConfigured = starterVoltage !== undefined || starterPower !== undefined;
@@ -109,8 +116,8 @@ function renderRvFlowScenario({
     },
     rv: {
       shore: { input_power: "sensor.shore" },
-      ac_charger: { output_power: "sensor.ac_output" },
-      solar_charger: { output_power: "sensor.solar_output" },
+      ac_charger: { state: "sensor.ac_state", output_power: "sensor.ac_output" },
+      solar_charger: { state: "sensor.solar_state", output_power: "sensor.solar_output" },
       cabin_battery: { net_power: "sensor.battery_net" },
       ...(boosterConfigured
         ? {
@@ -133,11 +140,13 @@ function renderRvFlowScenario({
     },
   } as PowerFlowCardPlusConfig;
   const hass = makeHass({
-    "sensor.shore": String(Math.max(acOutput, 0)),
+    "sensor.shore": String(resolvedShoreInput),
     "sensor.classic_solar": String(Math.max(solarOutput, 0)),
     "sensor.legacy_battery": "0",
     "sensor.ac_output": String(acOutput),
+    "sensor.ac_state": acState,
     "sensor.solar_output": String(solarOutput),
+    "sensor.solar_state": solarState,
     "sensor.battery_net": String(batteryNet),
     ...(boosterConfigured
       ? {
@@ -198,7 +207,7 @@ declare function computeRenderDataShape(): {
     rvMode: boolean;
     rvDcConsumption: number;
     shore: { has: boolean; inputPower: number; entity?: string };
-    acCharger: { has: boolean; outputPower: number };
+    acCharger: { has: boolean; state: string | null; outputPower: number };
     solarCharger: { has: boolean; outputPower: number; state: string | null };
     booster: { has: boolean; state: string | null; inputPower: number; outputPower: number };
     cabinBattery: {
@@ -312,6 +321,73 @@ describe("render", () => {
 
     expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).toBeNull();
+    expect(container.querySelector("#rv-starter-to-booster-flow")).toBeNull();
+    expect(container.querySelector("#rv-booster-to-dc-bus-flow")).toBeNull();
+  });
+
+  test.each(["on", "bulk", "float"])(
+    "active AC charger status %s cannot render a zero-power shore flow",
+    (acState) => {
+      const { container, data } = renderRvFlowScenario({
+        shoreInput: 0,
+        acOutput: 0,
+        acState,
+      });
+
+      expect(data.rvData.acCharger.state).toBe(acState);
+      expect(data.rvData.shore.inputPower).toBe(0);
+      expect(data.grid.has).toBe(true);
+      expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+    }
+  );
+
+  test("stale AC charger output cannot render a shore flow while shore input is zero", () => {
+    const { container, data } = renderRvFlowScenario({
+      shoreInput: 0,
+      acOutput: 20,
+      acState: "bulk",
+    });
+
+    expect(data.rvData.acCharger.outputPower).toBe(20);
+    expect(data.rvData.rvDcConsumption).toBe(20);
+    expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+  });
+
+  test.each(["unknown", "unavailable"])(
+    "measured shore and charger power render independently of AC status %s",
+    (acState) => {
+      const { container, data } = renderRvFlowScenario({
+        shoreInput: 220,
+        acOutput: 204,
+        acState,
+      });
+
+      expect(data.rvData.acCharger.state).toBeNull();
+      expect(
+        container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")
+      ).toBe("204");
+    }
+  );
+
+  test("active solar status cannot render a zero-output solar flow", () => {
+    const { container, data } = renderRvFlowScenario({
+      solarOutput: 0,
+      solarState: "active",
+    });
+
+    expect(data.rvData.solarCharger.state).toBe("active");
+    expect(container.querySelector("#rv-solar-dc-bus-flow")).toBeNull();
+  });
+
+  test("active booster status cannot render zero-output booster flows", () => {
+    const { container, data } = renderRvFlowScenario({
+      boosterInput: 320,
+      boosterOutput: 0,
+      boosterState: "active",
+      starterVoltage: 12.8,
+    });
+
+    expect(data.rvData.booster.state).toBe("active");
     expect(container.querySelector("#rv-starter-to-booster-flow")).toBeNull();
     expect(container.querySelector("#rv-booster-to-dc-bus-flow")).toBeNull();
   });
@@ -568,12 +644,15 @@ describe("render", () => {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
       entities: { grid: { entity: "sensor.grid" } },
-      rv: { ac_charger: { output_power: "sensor.ac_output" } },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        ac_charger: { output_power: "sensor.ac_output" },
+      },
     } as PowerFlowCardPlusConfig;
 
     const { container } = renderCard(
       config,
-      makeHass({ "sensor.grid": "0", "sensor.ac_output": "10" }),
+      makeHass({ "sensor.grid": "0", "sensor.shore": "10", "sensor.ac_output": "10" }),
       320
     );
 

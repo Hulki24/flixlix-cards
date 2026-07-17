@@ -31,7 +31,8 @@ export function flowShoreToDcBus(
   }
 ) {
   const value = rvData.acCharger.outputPower;
-  if (!rvData.rvMode || !rvData.acCharger.has || value <= 0) return nothing;
+  const acChargerActive = value > 0 && rvData.shore.inputPower > 0;
+  if (!rvData.rvMode || !rvData.acCharger.has || !acChargerActive) return nothing;
 
   const duration = newDur.shoreToDcBus ?? config.max_flow_rate;
   return html`<div
