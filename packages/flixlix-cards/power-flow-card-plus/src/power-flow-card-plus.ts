@@ -8,7 +8,9 @@ import { individualRightBottomElement } from "@flixlix-cards/shared/components/i
 import { individualRightTopElement } from "@flixlix-cards/shared/components/individual-right-top-element";
 import { dashboardLinkElement } from "@flixlix-cards/shared/components/misc/dashboard-link";
 import { nonFossilElement } from "@flixlix-cards/shared/components/non-fossil";
+import { boosterNodeElement } from "@flixlix-cards/shared/components/rv/booster-node";
 import { dcBusElement } from "@flixlix-cards/shared/components/rv/dc-bus";
+import { starterBatteryElement } from "@flixlix-cards/shared/components/rv/starter-battery";
 import { solarElement } from "@flixlix-cards/shared/components/solar";
 import { spacer } from "@flixlix-cards/shared/components/spacer";
 import { CIRCLE_CIRCUMFERENCE } from "@flixlix-cards/shared/const/circle";
@@ -165,6 +167,8 @@ export class PowerFlowCardPlus extends LitElement {
   @query("#rv-dc-bus-to-cabin-battery-flow") dcBusToCabinBatteryFlow?: SVGSVGElement;
   @query("#rv-cabin-battery-to-dc-bus-flow") cabinBatteryToDcBusFlow?: SVGSVGElement;
   @query("#rv-dc-bus-to-rv-flow") dcBusToRvFlow?: SVGSVGElement;
+  @query("#rv-starter-to-booster-flow") starterToBoosterFlow?: SVGSVGElement;
+  @query("#rv-booster-to-dc-bus-flow") boosterToDcBusFlow?: SVGSVGElement;
   private _renderData?:
     | {
         entities: PowerFlowCardPlusConfig["entities"];
@@ -435,6 +439,7 @@ export class PowerFlowCardPlus extends LitElement {
       individualFieldRightTop,
       individualFieldRightBottom,
       rvMode,
+      rvData,
       dcBus,
     } = data;
     const getIndividualDisplayState = (field?: IndividualObject) => {
@@ -527,9 +532,13 @@ export class PowerFlowCardPlus extends LitElement {
               : spacer}
             ${checkHasRightIndividual(individualObjs) ? spacer : nothing}
           </div>
-          ${battery.has || checkHasBottomIndividual(individualObjs)
+          ${battery.has ||
+          (rvMode && rvData.starterBattery.has) ||
+          checkHasBottomIndividual(individualObjs)
             ? html`<div class="row">
-                ${spacer}
+                ${rvMode && rvData.starterBattery.has
+                  ? starterBatteryElement(this.hass, this._config, rvData.starterBattery)
+                  : spacer}
                 ${battery.has ? batteryElement(this, this._config, { battery, entities }) : spacer}
                 ${individualFieldLeftBottom
                   ? individualLeftBottomElement(this, this._config, {
@@ -549,6 +558,7 @@ export class PowerFlowCardPlus extends LitElement {
                   : nothing}
               </div>`
             : spacer}
+          ${rvMode ? boosterNodeElement(rvData.booster, this._width <= 420) : nothing}
           ${flowElement(
             this._config,
             {
@@ -1135,6 +1145,8 @@ export class PowerFlowCardPlus extends LitElement {
         Math.max(rvData.solarCharger.outputPower, 0) +
         Math.max(rvData.cabinBattery.measuredIn, 0) +
         Math.max(rvData.cabinBattery.measuredOut, 0) +
+        Math.max(rvData.booster.inputPower, 0) +
+        Math.max(rvData.booster.outputPower, 0) +
         Math.max(rvData.rvDcConsumption, 0)
       : (grid.state.toHome ?? 0) +
         (solar.state.toHome ?? 0) +
@@ -1195,6 +1207,8 @@ export class PowerFlowCardPlus extends LitElement {
               totalLines
             ),
             dcBusToRv: computeFlowRate(this._config, rvData.rvDcConsumption, totalLines),
+            starterToBooster: computeFlowRate(this._config, rvData.booster.inputPower, totalLines),
+            boosterToDcBus: computeFlowRate(this._config, rvData.booster.outputPower, totalLines),
           }
         : {}),
     };
@@ -1210,7 +1224,9 @@ export class PowerFlowCardPlus extends LitElement {
         | "solarToDcBus"
         | "dcBusToCabinBattery"
         | "cabinBatteryToDcBus"
-        | "dcBusToRv";
+        | "dcBusToRv"
+        | "starterToBooster"
+        | "boosterToDcBus";
       const flowNames: AnimatedFlowName[] = rvMode
         ? [
             "shoreToDcBus",
@@ -1218,6 +1234,8 @@ export class PowerFlowCardPlus extends LitElement {
             "dcBusToCabinBattery",
             "cabinBatteryToDcBus",
             "dcBusToRv",
+            "starterToBooster",
+            "boosterToDcBus",
           ]
         : [
             "batteryGrid",

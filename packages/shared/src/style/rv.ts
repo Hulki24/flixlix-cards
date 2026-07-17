@@ -34,6 +34,66 @@ export const rvStyles = css`
     height: 8px;
   }
 
+  .rv-starter-battery {
+    height: 110px;
+    justify-content: flex-end;
+  }
+
+  .rv-starter-battery .circle {
+    border-color: var(--energy-starter-battery-color, var(--energy-battery-out-color, #4db6ac));
+  }
+
+  .rv-starter-battery ha-icon {
+    color: var(--energy-starter-battery-color, var(--energy-battery-out-color, #4db6ac));
+  }
+
+  .rv-booster-node-container {
+    position: absolute;
+    z-index: 3;
+    left: calc(33% - 7px);
+    bottom: 93px;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .rv-booster-node-container--narrow {
+    left: calc(32% - 6px);
+    width: 12px;
+    height: 12px;
+  }
+
+  .rv-booster-node {
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    border: 2px solid var(--energy-booster-color, var(--primary-color, #03a9f4));
+    border-radius: 2px;
+    background: var(--card-background-color, var(--ha-card-background, #fff));
+    opacity: 0.55;
+  }
+
+  .rv-booster-node--active {
+    background: var(--energy-booster-color, var(--primary-color, #03a9f4));
+    opacity: 0.9;
+  }
+
+  path.rv-starter-to-booster-path,
+  circle.rv-starter-to-booster-dot,
+  path.rv-booster-to-dc-bus-path,
+  circle.rv-booster-to-dc-bus-dot {
+    stroke: var(--energy-booster-color, var(--primary-color, #03a9f4));
+  }
+
+  circle.rv-starter-to-booster-dot,
+  circle.rv-booster-to-dc-bus-dot {
+    fill: var(--energy-booster-color, var(--primary-color, #03a9f4));
+    stroke-width: 4;
+  }
+
   path.rv-shore-dc-bus-path,
   circle.rv-shore-dc-bus-dot {
     stroke: var(--energy-grid-consumption-color, #488fc2);

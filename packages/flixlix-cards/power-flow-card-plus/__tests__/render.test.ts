@@ -78,12 +78,25 @@ function renderRvFlowScenario({
   solarOutput = 0,
   batteryNet = 0,
   dcPower,
+  boosterInput,
+  boosterOutput,
+  boosterState,
+  starterVoltage,
+  starterPower,
 }: {
   acOutput?: number;
   solarOutput?: number;
   batteryNet?: number;
   dcPower?: number;
+  boosterInput?: number;
+  boosterOutput?: number;
+  boosterState?: string;
+  starterVoltage?: number;
+  starterPower?: number;
 }) {
+  const boosterConfigured =
+    boosterInput !== undefined || boosterOutput !== undefined || boosterState !== undefined;
+  const starterConfigured = starterVoltage !== undefined || starterPower !== undefined;
   const config = {
     type: "custom:power-flow-card-plus",
     rv_mode: true,
@@ -99,6 +112,23 @@ function renderRvFlowScenario({
       ac_charger: { output_power: "sensor.ac_output" },
       solar_charger: { output_power: "sensor.solar_output" },
       cabin_battery: { net_power: "sensor.battery_net" },
+      ...(boosterConfigured
+        ? {
+            booster: {
+              state: "sensor.booster_state",
+              input_power: "sensor.booster_input",
+              output_power: "sensor.booster_output",
+            },
+          }
+        : {}),
+      ...(starterConfigured
+        ? {
+            starter_battery: {
+              voltage: "sensor.starter_voltage",
+              power: "sensor.starter_power",
+            },
+          }
+        : {}),
       ...(dcPower === undefined ? {} : { loads: { dc_power: "sensor.dc_load" } }),
     },
   } as PowerFlowCardPlusConfig;
@@ -109,6 +139,19 @@ function renderRvFlowScenario({
     "sensor.ac_output": String(acOutput),
     "sensor.solar_output": String(solarOutput),
     "sensor.battery_net": String(batteryNet),
+    ...(boosterConfigured
+      ? {
+          "sensor.booster_state": boosterState ?? "unknown",
+          "sensor.booster_input": String(boosterInput ?? 0),
+          "sensor.booster_output": String(boosterOutput ?? 0),
+        }
+      : {}),
+    ...(starterConfigured
+      ? {
+          "sensor.starter_voltage": String(starterVoltage ?? 0),
+          "sensor.starter_power": String(starterPower ?? 0),
+        }
+      : {}),
     ...(dcPower === undefined ? {} : { "sensor.dc_load": String(dcPower) }),
   });
 
@@ -157,7 +200,7 @@ declare function computeRenderDataShape(): {
     shore: { has: boolean; inputPower: number; entity?: string };
     acCharger: { has: boolean; outputPower: number };
     solarCharger: { has: boolean; outputPower: number; state: string | null };
-    booster: { has: boolean; outputPower: number };
+    booster: { has: boolean; state: string | null; inputPower: number; outputPower: number };
     cabinBattery: {
       has: boolean;
       netPower: number;
@@ -269,6 +312,8 @@ describe("render", () => {
 
     expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).toBeNull();
+    expect(container.querySelector("#rv-starter-to-booster-flow")).toBeNull();
+    expect(container.querySelector("#rv-booster-to-dc-bus-flow")).toBeNull();
   });
 
   test("AC 204 W and measured battery input 159 W render a 45 W RV load", () => {
@@ -330,6 +375,79 @@ describe("render", () => {
       "100"
     );
   });
+
+  test("booster input and output render the starter-to-booster-to-bus path", () => {
+    const { container, data } = renderRvFlowScenario({
+      boosterInput: 320,
+      boosterOutput: 300,
+      boosterState: "on",
+      starterVoltage: 12.8,
+      starterPower: 320,
+    });
+
+    expect(data.rvData.booster.inputPower).toBe(320);
+    expect(data.rvData.booster.outputPower).toBe(300);
+    expect(
+      container.querySelector("#rv-starter-to-booster-flow")?.getAttribute("data-power-watts")
+    ).toBe("320");
+    expect(
+      container.querySelector("#rv-booster-to-dc-bus-flow")?.getAttribute("data-power-watts")
+    ).toBe("300");
+    expect(container.querySelector('[data-power-watts="20"]')).toBeNull();
+    expect(container.querySelector("#rv-booster-node")?.getAttribute("data-active")).toBe("true");
+    expect(container.querySelector("#rv-starter-battery")?.textContent).toContain("12.8");
+  });
+
+  test("zero booster output hides both booster flows but keeps the starter battery visible", () => {
+    const { container } = renderRvFlowScenario({
+      boosterInput: 320,
+      boosterOutput: 0,
+      boosterState: "off",
+      starterVoltage: 12.7,
+    });
+
+    expect(container.querySelector("#rv-starter-to-booster-flow")).toBeNull();
+    expect(container.querySelector("#rv-booster-to-dc-bus-flow")).toBeNull();
+    expect(container.querySelector("#rv-starter-battery")).not.toBeNull();
+    expect(container.querySelector("#rv-booster-node")?.getAttribute("data-active")).toBe("false");
+  });
+
+  test("booster output contributes to battery charging and the remaining RV load", () => {
+    const { container, data } = renderRvFlowScenario({
+      boosterInput: 320,
+      boosterOutput: 300,
+      boosterState: "active",
+      starterVoltage: 13.8,
+      batteryNet: 250,
+    });
+
+    expect(data.rvData.rvDcConsumption).toBe(50);
+    expect(
+      container.querySelector("#rv-booster-to-dc-bus-flow")?.getAttribute("data-power-watts")
+    ).toBe("300");
+    expect(
+      container.querySelector("#rv-dc-bus-to-cabin-battery-flow")?.getAttribute("data-power-watts")
+    ).toBe("250");
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")).toBe(
+      "50"
+    );
+  });
+
+  test.each(["unknown", "unavailable"])(
+    "booster output renders safely when status is %s",
+    (boosterState) => {
+      const { container, data } = renderRvFlowScenario({
+        boosterInput: 320,
+        boosterOutput: 300,
+        boosterState,
+        starterVoltage: 13.5,
+      });
+
+      expect(data.rvData.booster.state).toBeNull();
+      expect(container.querySelector("#rv-booster-to-dc-bus-flow")).not.toBeNull();
+      expect(container.querySelector("#rv-starter-to-booster-flow")).not.toBeNull();
+    }
+  );
 
   test("configured zero DC load suppresses the RV flow and every zero-line", () => {
     const { container, data } = renderRvFlowScenario({ acOutput: 100, dcPower: 0 });
@@ -407,6 +525,10 @@ describe("render", () => {
     const homeConfig = {
       type: "custom:power-flow-card-plus",
       entities: { grid: { entity: "sensor.grid" } },
+      rv: {
+        booster: { output_power: "sensor.booster_output" },
+        starter_battery: { voltage: "sensor.starter_voltage" },
+      },
     } as PowerFlowCardPlusConfig;
 
     const rv = renderCard(rvConfig, makeHass({ "sensor.grid": "0" }));
@@ -414,6 +536,8 @@ describe("render", () => {
 
     expect(rv.container.querySelector("#rv-dc-bus")).not.toBeNull();
     expect(home.container.querySelector("#rv-dc-bus")).toBeNull();
+    expect(home.container.querySelector("#rv-booster-node")).toBeNull();
+    expect(home.container.querySelector("#rv-starter-battery")).toBeNull();
   });
 
   test("configured zero-watt RV structure keeps an inactive DC bus node visible", () => {

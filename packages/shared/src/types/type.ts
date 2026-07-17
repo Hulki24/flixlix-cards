@@ -139,6 +139,8 @@ export type NewDur = {
   dcBusToCabinBattery?: number;
   cabinBatteryToDcBus?: number;
   dcBusToRv?: number;
+  starterToBooster?: number;
+  boosterToDcBus?: number;
 };
 
 export type GridObject = {
