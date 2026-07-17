@@ -12,6 +12,7 @@
     "allow_layout_break": "Allow Layout Break",
     "base_decimals": "Base Decimals",
     "battery": "Battery",
+    "rv": "RV Configuration",
     "calculate_flow_rate": "Calculate Flow Rate",
     "circle_animation": "Circle Animation",
     "clickable_entities": "Clickable Entities",

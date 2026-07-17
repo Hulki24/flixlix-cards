@@ -19,6 +19,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { assert } from "superstruct";
 import { advancedOptionsSchema, cardConfigStruct, generalConfigSchema } from "./schema/_schema-all";
+import { rvEditorSchema } from "./schema/rv";
 
 const CONFIG_PAGES: {
   page: ConfigPage;
@@ -51,6 +52,11 @@ const CONFIG_PAGES: {
     schema: homeSchema,
   },
   {
+    page: "rv",
+    icon: "mdi:caravan",
+    schema: rvEditorSchema,
+  },
+  {
     page: "individual",
     icon: "mdi:dots-horizontal-circle-outline",
   },
@@ -60,6 +66,22 @@ const CONFIG_PAGES: {
     schema: advancedOptionsSchema,
   },
 ];
+
+function removeEmptyOptionalValues(value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) return value;
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([key, entry]) => [key, removeEmptyOptionalValues(entry)] as const)
+    .filter(([, entry]) => entry !== undefined);
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+export function sanitizeRvEditorValue(value: unknown): PowerFlowCardPlusConfig["rv"] | undefined {
+  return removeEmptyOptionalValues(value) as PowerFlowCardPlusConfig["rv"] | undefined;
+}
 
 @customElement("power-flow-card-plus-editor")
 export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardEditor {
@@ -84,6 +106,27 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
 
   private _goBack(): void {
     this._currentConfigPage = null;
+  }
+
+  private _shouldShowRvEditor(): boolean {
+    return (
+      this._config?.rv_mode === true ||
+      this._config?.main_config?.rv_mode === true ||
+      this._config?.rv !== undefined
+    );
+  }
+
+  private _renderRvHelp() {
+    return html`
+      <ha-alert class="rv-editor-help" alert-type="info">
+        <ul>
+          <li>Power entities take precedence over voltage × current.</li>
+          <li>Battery net power: positive means charging, negative means discharging.</li>
+          <li>Loads DC power overrides the internal DC consumption calculation.</li>
+          <li>Conversion losses are not rendered as an energy flow.</li>
+        </ul>
+      </ha-alert>
+    `;
   }
 
   private _hasLegacyFields(): boolean {
@@ -235,10 +278,16 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
               this._config.display_zero_lines?.mode ?? defaultValues.displayZeroLines.mode
             )
           : CONFIG_PAGES.find((page) => page.page === currentPage)?.schema;
-      const dataForForm = currentPage === "advanced" ? data : data.entities[currentPage];
+      const dataForForm =
+        currentPage === "advanced"
+          ? data
+          : currentPage === "rv"
+            ? (data.rv ?? {})
+            : data.entities[currentPage];
       return html`
         ${this._renderLegacyFieldsAlert()}${this._renderLegacyIndividualFieldsAlert()}
         <subpage-header @go-back=${this._goBack} page=${this._currentConfigPage}> </subpage-header>
+        ${currentPage === "rv" ? this._renderRvHelp() : nothing}
         <ha-form
           .hass=${this.hass}
           .data=${dataForForm}
@@ -255,7 +304,7 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
     ) => {
       if (page === null) return nothing;
       const getIconToUse = () => {
-        if (page === "individual" || page === "advanced") return fallbackIcon;
+        if (page === "individual" || page === "advanced" || page === "rv") return fallbackIcon;
         const entityConfig = this?._config?.entities[page] as { icon?: string } | undefined;
         return entityConfig?.icon || fallbackIcon;
       };
@@ -272,7 +321,9 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
     };
 
     const renderLinkSubPages = () => {
-      return CONFIG_PAGES.map((page) => renderLinkSubpage(page.page, page.icon));
+      return CONFIG_PAGES.filter((page) => page.page !== "rv" || this._shouldShowRvEditor()).map(
+        (page) => renderLinkSubpage(page.page, page.icon)
+      );
     };
     return html`
       <div class="card-config">
@@ -296,7 +347,15 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
       return;
     }
 
-    if (
+    if (this._currentConfigPage === "rv") {
+      const rv = sanitizeRvEditorValue(config);
+      config = { ...this._config };
+      if (rv === undefined) {
+        delete config.rv;
+      } else {
+        config.rv = rv;
+      }
+    } else if (
       this._currentConfigPage !== null &&
       this._currentConfigPage !== "advanced" &&
       this._currentConfigPage !== "individual"

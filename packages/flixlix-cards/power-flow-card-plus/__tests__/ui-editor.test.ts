@@ -1,6 +1,8 @@
+import { render as renderTemplate } from "lit";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { generalConfigSchema } from "../src/ui-editor/schema/_schema-all";
+import { rvEditorSchema } from "../src/ui-editor/schema/rv";
 import { PowerFlowCardPlusEditor } from "../src/ui-editor/ui-editor";
 
 const { loadHaFormMock } = vi.hoisted(() => ({
@@ -10,6 +12,16 @@ const { loadHaFormMock } = vi.hoisted(() => ({
 vi.mock("@flixlix-cards/shared/ui-editor/utils/load-ha-form", () => ({
   loadHaForm: loadHaFormMock,
 }));
+
+async function renderEditor(config: Record<string, unknown>, currentPage: string | null = null) {
+  const editor = new PowerFlowCardPlusEditor();
+  (editor as any).hass = { localize: vi.fn(() => undefined) };
+  await editor.setConfig(config as any);
+  (editor as any)._currentConfigPage = currentPage;
+  const container = document.createElement("div");
+  renderTemplate((editor as any).render(), container);
+  return { editor, container };
+}
 
 describe("power flow ui editor", () => {
   beforeEach(() => {
@@ -34,18 +46,181 @@ describe("power flow ui editor", () => {
     });
   });
 
+  test("RV editor exposes every neutral group in the intended order", () => {
+    expect(rvEditorSchema.map((group) => group.name)).toEqual([
+      "shore",
+      "ac_charger",
+      "solar_charger",
+      "booster",
+      "cabin_battery",
+      "starter_battery",
+      "loads",
+    ]);
+    expect(rvEditorSchema.map((group) => group.title)).toEqual([
+      "Shore",
+      "AC Charger",
+      "Solar Charger",
+      "Booster",
+      "Cabin Battery",
+      "Starter Battery",
+      "Loads",
+    ]);
+    expect(rvEditorSchema.every((group) => group.type === "expandable")).toBe(true);
+    expect(
+      rvEditorSchema.every((group) => group.schema.every((field) => "entity" in field.selector))
+    ).toBe(true);
+    expect(JSON.stringify(rvEditorSchema)).not.toMatch(/Victron|Orion|IP22|Shelly/i);
+  });
+
+  test("RV group fields cover the complete structured configuration", () => {
+    const fields = Object.fromEntries(
+      rvEditorSchema.map((group) => [group.name, group.schema.map((field) => field.name)])
+    );
+
+    expect(fields).toEqual({
+      shore: ["input_power"],
+      ac_charger: [
+        "state",
+        "input_power",
+        "input_voltage",
+        "input_current",
+        "output_power",
+        "output_voltage",
+        "output_current",
+      ],
+      solar_charger: ["state", "output_power", "output_voltage", "output_current"],
+      booster: [
+        "state",
+        "input_power",
+        "input_voltage",
+        "input_current",
+        "output_power",
+        "output_voltage",
+        "output_current",
+      ],
+      cabin_battery: ["net_power", "voltage", "state_of_charge", "charging_state"],
+      starter_battery: ["voltage", "power"],
+      loads: ["total_power", "ac_power", "dc_power"],
+    });
+  });
+
+  test("RV editor link is hidden in house mode while Classic entity pages remain available", async () => {
+    const { container } = await renderEditor({
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.grid" } },
+    });
+
+    expect(container.querySelector('link-subpage[path="rv"]')).toBeNull();
+    expect(container.querySelector('link-subpage[path="grid"]')).not.toBeNull();
+    expect(container.querySelector('link-subpage[path="solar"]')).not.toBeNull();
+    expect(container.querySelector('link-subpage[path="battery"]')).not.toBeNull();
+    expect(container.querySelector('link-subpage[path="home"]')).not.toBeNull();
+  });
+
+  test.each([
+    { rv_mode: true },
+    { main_config: { rv_mode: true } },
+    { rv: {} },
+    { rv: { shore: { input_power: "sensor.shore" } } },
+  ])("RV editor link is visible for an active or configured RV card", async (rvConfig) => {
+    const { container } = await renderEditor({
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.grid" } },
+      ...rvConfig,
+    });
+
+    expect(container.querySelector('link-subpage[path="rv"]')).not.toBeNull();
+  });
+
+  test("RV subpage uses the structured schema and displays all help texts", async () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.grid" } },
+      rv: { shore: { input_power: "sensor.shore" } },
+    };
+    const { container } = await renderEditor(config, "rv");
+    const form = container.querySelector("ha-form") as any;
+    const help = container.querySelector(".rv-editor-help")?.textContent ?? "";
+
+    expect(form.schema).toBe(rvEditorSchema);
+    expect(form.data).toEqual(config.rv);
+    expect(help).toContain("Power entities take precedence over voltage × current");
+    expect(help).toContain("positive means charging, negative means discharging");
+    expect(help).toContain("overrides the internal DC consumption calculation");
+    expect(help).toContain("Conversion losses are not rendered as an energy flow");
+  });
+
+  test("RV entity selector values are stored as nested entity IDs", () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const configChanged = vi.fn();
+    editor.addEventListener("config-changed", configChanged);
+    (editor as any).hass = { localize: vi.fn() };
+    (editor as any)._config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.grid" } },
+    };
+    (editor as any)._currentConfigPage = "rv";
+
+    (editor as any)._valueChanged({
+      detail: {
+        value: {
+          shore: { input_power: "sensor.shore_input" },
+          booster: { output_power: "sensor.booster_output" },
+        },
+      },
+    });
+
+    const config = configChanged.mock.calls[0]?.[0]?.detail?.config;
+    expect(config.rv).toEqual({
+      shore: { input_power: "sensor.shore_input" },
+      booster: { output_power: "sensor.booster_output" },
+    });
+    expect(config.rv_mode).toBe(true);
+    expect(config.entities.grid).toEqual({ entity: "sensor.grid" });
+  });
+
+  test("empty optional RV fields and empty groups are omitted", () => {
+    const editor = new PowerFlowCardPlusEditor();
+    const configChanged = vi.fn();
+    editor.addEventListener("config-changed", configChanged);
+    (editor as any).hass = { localize: vi.fn() };
+    (editor as any)._config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.grid" } },
+      rv: { shore: { input_power: "sensor.old_shore" } },
+    };
+    (editor as any)._currentConfigPage = "rv";
+
+    (editor as any)._valueChanged({
+      detail: {
+        value: {
+          shore: { input_power: "" },
+          ac_charger: { state: undefined, output_power: "sensor.ac_output" },
+          booster: {},
+          loads: { dc_power: null },
+        },
+      },
+    });
+
+    const config = configChanged.mock.calls[0]?.[0]?.detail?.config;
+    expect(config.rv).toEqual({ ac_charger: { output_power: "sensor.ac_output" } });
+  });
+
   test.each([{ rv_mode: true }, { main_config: { rv_mode: true } }])(
     "editor config schema accepts and retains RV mode",
     async (modeConfig) => {
-    const editor = new PowerFlowCardPlusEditor();
-    const config = {
-      type: "custom:power-flow-card-plus",
-      entities: { grid: { entity: "sensor.shore" } },
-      ...modeConfig,
-    } as any;
+      const editor = new PowerFlowCardPlusEditor();
+      const config = {
+        type: "custom:power-flow-card-plus",
+        entities: { grid: { entity: "sensor.shore" } },
+        ...modeConfig,
+      } as any;
 
-    await expect(editor.setConfig(config)).resolves.toBeUndefined();
-    expect((editor as any)._config).toMatchObject(modeConfig);
+      await expect(editor.setConfig(config)).resolves.toBeUndefined();
+      expect((editor as any)._config).toMatchObject(modeConfig);
     }
   );
 
