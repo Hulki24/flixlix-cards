@@ -93,7 +93,7 @@ function renderRvFlowScenario({
   solarOutput?: number;
   solarState?: string;
   batteryNet?: number;
-  dcPower?: number;
+  dcPower?: number | "unavailable";
   boosterInput?: number;
   boosterOutput?: number;
   boosterState?: string;
@@ -112,7 +112,7 @@ function renderRvFlowScenario({
       grid: { entity: "sensor.shore" },
       solar: { entity: "sensor.classic_solar" },
       battery: { entity: "sensor.legacy_battery" },
-      home: { name: "RV" },
+      home: { entity: "sensor.classic_home", name: "RV", override_state: true },
     },
     rv: {
       shore: { input_power: "sensor.shore" },
@@ -148,6 +148,7 @@ function renderRvFlowScenario({
     "sensor.solar_output": String(solarOutput),
     "sensor.solar_state": solarState,
     "sensor.battery_net": String(batteryNet),
+    "sensor.classic_home": "999",
     ...(boosterConfigured
       ? {
           "sensor.booster_state": boosterState ?? "unknown",
@@ -353,6 +354,80 @@ describe("render", () => {
     expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
   });
 
+  test("shore and charger output remain distinct measurement points in the RV balance", () => {
+    const { container, data } = renderRvFlowScenario({
+      shoreInput: 13,
+      acOutput: 46,
+      solarOutput: 23,
+      batteryNet: 0,
+    });
+
+    expect(data.rvData.shore.inputPower).toBe(13);
+    expect(data.rvData.acCharger.outputPower).toBe(46);
+    expect(data.rvData.solarCharger.outputPower).toBe(23);
+    expect(data.rvData.cabinBattery.measuredIn).toBe(0);
+    expect(data.rvData.cabinBattery.measuredOut).toBe(0);
+    expect(data.rvData.rvDcConsumption).toBe(69);
+    expect(container.querySelector(".circle-container.grid .circle")?.textContent).toContain("13");
+    expect(container.querySelector(".circle-container.solar .circle")?.textContent).toContain("23");
+    expect(container.querySelector("#home-circle")?.textContent).toContain("69");
+    expect(container.querySelector("#home-circle")?.textContent).not.toContain("999");
+    expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "46"
+    );
+  });
+
+  test("unavailable AC output uses UxI before legacy and never Classic battery power", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        solar: { entity: "sensor.classic_solar" },
+        battery: { entity: { production: "sensor.classic_battery_charge" } },
+        home: { entity: "sensor.classic_home", override_state: true },
+      },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        ac_charger: {
+          output_power: "sensor.ac_output",
+          output_voltage: "sensor.ac_voltage",
+          output_current: "sensor.ac_current",
+        },
+        solar_charger: { output_power: "sensor.solar_output" },
+        cabin_battery: { net_power: "sensor.battery_net" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const unavailable = makeHass({
+      "sensor.shore": "13",
+      "sensor.classic_solar": "23",
+      "sensor.classic_battery_charge": "46",
+      "sensor.classic_home": "69",
+      "sensor.ac_output": "unavailable",
+      "sensor.ac_voltage": "unavailable",
+      "sensor.ac_current": "unavailable",
+      "sensor.solar_output": "23",
+      "sensor.battery_net": "0",
+    });
+    const withoutUxI = renderCard(config, unavailable);
+    const withoutUxIData = withoutUxI.card._computeRenderData();
+
+    expect(withoutUxIData.rvData.acCharger.outputPower).toBe(0);
+    expect(withoutUxIData.rvData.rvDcConsumption).toBe(23);
+    expect(withoutUxI.container.querySelector("#home-circle")?.textContent).toContain("23");
+    expect(withoutUxI.container.querySelector("#home-circle")?.textContent).not.toContain("69");
+    expect(withoutUxI.container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+
+    unavailable.states["sensor.ac_voltage"].state = "23";
+    unavailable.states["sensor.ac_current"].state = "2";
+    const withUxI = renderCard(config, unavailable);
+    const withUxIData = withUxI.card._computeRenderData();
+
+    expect(withUxIData.rvData.acCharger.outputPower).toBe(46);
+    expect(withUxIData.rvData.rvDcConsumption).toBe(69);
+    expect(withUxI.container.querySelector("#home-circle")?.textContent).toContain("69");
+  });
+
   test.each(["unknown", "unavailable"])(
     "measured shore and charger power render independently of AC status %s",
     (acState) => {
@@ -388,6 +463,7 @@ describe("render", () => {
     });
 
     expect(data.rvData.booster.state).toBe("active");
+    expect(container.querySelector("#rv-booster-node")).toBeNull();
     expect(container.querySelector("#rv-starter-to-booster-flow")).toBeNull();
     expect(container.querySelector("#rv-booster-to-dc-bus-flow")).toBeNull();
   });
@@ -471,6 +547,10 @@ describe("render", () => {
     expect(data.rvData.rvDcConsumption).toBe(100);
     expect(container.querySelector("#rv-dc-bus-to-cabin-battery-flow")).toBeNull();
     expect(container.querySelector("#rv-cabin-battery-to-dc-bus-flow")).toBeNull();
+    expect(container.querySelector("#rv-dc-bus-to-cabin-battery-path")).toBeNull();
+    expect(container.querySelector("#rv-cabin-battery-to-dc-bus-path")).toBeNull();
+    expect(container.querySelector(".rv-dc-bus-to-cabin-battery-dot")).toBeNull();
+    expect(container.querySelector(".rv-cabin-battery-to-dc-bus-dot")).toBeNull();
     expect(container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")).toBe(
       "100"
     );
@@ -498,9 +578,9 @@ describe("render", () => {
     expect(container.querySelector("#rv-starter-battery")?.textContent).toContain("12.8");
   });
 
-  test("zero booster output hides both booster flows but keeps the starter battery visible", () => {
+  test("zero booster power hides its node and both flows but keeps the starter battery visible", () => {
     const { container } = renderRvFlowScenario({
-      boosterInput: 320,
+      boosterInput: 0,
       boosterOutput: 0,
       boosterState: "off",
       starterVoltage: 12.7,
@@ -509,7 +589,7 @@ describe("render", () => {
     expect(container.querySelector("#rv-starter-to-booster-flow")).toBeNull();
     expect(container.querySelector("#rv-booster-to-dc-bus-flow")).toBeNull();
     expect(container.querySelector("#rv-starter-battery")).not.toBeNull();
-    expect(container.querySelector("#rv-booster-node")?.getAttribute("data-active")).toBe("false");
+    expect(container.querySelector("#rv-booster-node")).toBeNull();
   });
 
   test("booster output contributes to battery charging and the remaining RV load", () => {
@@ -557,6 +637,26 @@ describe("render", () => {
     expect(container.querySelector("#rv-dc-bus-to-rv-flow")).toBeNull();
     expect(container.querySelector("#rv-dc-bus-to-cabin-battery-flow")).toBeNull();
     expect(container.querySelector("#rv-cabin-battery-to-dc-bus-flow")).toBeNull();
+  });
+
+  test("RV bubble uses an available DC load override and falls back when it is unavailable", () => {
+    const measured = renderRvFlowScenario({ acOutput: 100, solarOutput: 20, dcPower: 42 });
+    const unavailable = renderRvFlowScenario({
+      acOutput: 100,
+      solarOutput: 20,
+      dcPower: "unavailable",
+    });
+
+    expect(measured.data.rvData.loads.dcPowerConfigured).toBe(true);
+    expect(measured.data.rvData.loads.dcPower).toBe(42);
+    expect(measured.data.rvData.rvDcConsumption).toBe(42);
+    expect(measured.container.querySelector("#home-circle")?.textContent).toContain("42");
+    expect(measured.container.querySelector("#home-circle")?.textContent).not.toContain("999");
+
+    expect(unavailable.data.rvData.loads.dcPowerConfigured).toBe(false);
+    expect(unavailable.data.rvData.rvDcConsumption).toBe(120);
+    expect(unavailable.container.querySelector("#home-circle")?.textContent).toContain("120");
+    expect(unavailable.container.querySelector("#home-circle")?.textContent).not.toContain("999");
   });
 
   test("simultaneous positive battery raw flows are conservatively netted", () => {

@@ -10,9 +10,9 @@ export function boosterNodeElement(
   booster: RvChargerRuntimeData,
   narrow = false
 ): TemplateResult | typeof nothing {
-  if (!booster.has) return nothing;
-
   const active = isBoosterActive(booster);
+  if (!booster.has || !active) return nothing;
+
   return html`
     <div
       id="rv-booster-node"

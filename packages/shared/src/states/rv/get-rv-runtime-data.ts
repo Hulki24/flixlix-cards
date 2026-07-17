@@ -143,11 +143,18 @@ export function getRvRuntimeData(
     rv?.house_battery?.charge,
     classicEntity(classic.battery?.entity, "production"),
   ];
+  const legacyAcChargerOutputEntities = [
+    rv?.house_battery?.charge,
+    ...(isConfiguredEntity(rv?.cabin_battery?.net_power)
+      ? []
+      : [classicEntity(classic.battery?.entity, "production")]),
+  ];
   const legacyDischargeEntities = [
     rv?.house_battery?.discharge,
     classicEntity(classic.battery?.entity, "consumption"),
   ];
   const legacyChargeEntity = firstConfiguredEntity(...legacyChargeEntities);
+  const legacyAcChargerOutputEntity = firstConfiguredEntity(...legacyAcChargerOutputEntities);
   const legacyDischargeEntity = firstConfiguredEntity(...legacyDischargeEntities);
   const legacySolarEntities = [rv?.solar?.entity, classicEntity(classic.solar?.entity)];
   const legacyBoosterEntities = [rv?.orion?.entity];
@@ -174,7 +181,7 @@ export function getRvRuntimeData(
     ac?.output_power,
     ac?.output_voltage,
     ac?.output_current,
-    ...legacyChargeEntities
+    ...legacyAcChargerOutputEntities
   );
   const solarChargerOutput = resolveStructuredPowerWithFallback(
     hass,
@@ -196,8 +203,9 @@ export function getRvRuntimeData(
   const acPower =
     resolveFirstAvailablePower(hass, rv?.loads?.ac_power, ...legacyAcLoadEntities) ?? 0;
   const dcPowerCandidates = [rv?.loads?.dc_power, ...legacyDcLoadEntities];
-  const dcPowerConfigured = hasAnyConfiguredEntity(...dcPowerCandidates);
-  const dcPower = resolveFirstAvailablePower(hass, ...dcPowerCandidates) ?? 0;
+  const resolvedDcPower = resolveFirstAvailablePower(hass, ...dcPowerCandidates);
+  const dcPowerConfigured = resolvedDcPower !== null;
+  const dcPower = resolvedDcPower ?? 0;
   const rvDcConsumption = dcPowerConfigured
     ? Math.max(dcPower, 0)
     : Math.max(
@@ -226,7 +234,7 @@ export function getRvRuntimeData(
         ac?.output_power,
         ac?.output_voltage,
         ac?.output_current,
-        legacyChargeEntity
+        legacyAcChargerOutputEntity
       ),
       state: resolveOptionalState(hass, ac?.state),
       inputPower: resolveStructuredPowerWithFallback(
