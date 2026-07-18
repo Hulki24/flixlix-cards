@@ -517,6 +517,62 @@ describe("render", () => {
     );
   });
 
+  test("solar charging is subtracted from the calculated DC load", () => {
+    const { container, data } = renderRvFlowScenario({
+      shoreInput: 0,
+      acOutput: 0,
+      solarOutput: 56.13,
+      boosterOutput: 0,
+      batteryNet: 22.8,
+    });
+
+    expect(data.rvData.cabinBattery.measuredIn).toBe(22.8);
+    expect(data.rvData.cabinBattery.measuredOut).toBe(0);
+    expect(data.rvData.loads.dcPowerConfigured).toBe(false);
+    expect(data.rvData.rvDcConsumption).toBeCloseTo(33.33, 10);
+    expect(data.battery.state.toBattery).toBe(22.8);
+    expect(data.battery.state.fromBattery).toBe(0);
+    expect(container.querySelector("#home-circle")?.textContent).toContain("33");
+    expect(
+      container.querySelector("#rv-solar-dc-bus-flow")?.getAttribute("data-power-watts")
+    ).toBe("56.13");
+    expect(
+      container.querySelector("#rv-dc-bus-to-cabin-battery-flow")?.getAttribute("data-power-watts")
+    ).toBe("22.8");
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")).toBe(
+      "33.33"
+    );
+  });
+
+  test("battery discharge is added to the calculated DC load", () => {
+    const { data } = renderRvFlowScenario({
+      shoreInput: 0,
+      acOutput: 0,
+      solarOutput: 0,
+      boosterOutput: 0,
+      batteryNet: -22.8,
+    });
+
+    expect(data.rvData.cabinBattery.measuredIn).toBe(0);
+    expect(data.rvData.cabinBattery.measuredOut).toBe(22.8);
+    expect(data.rvData.loads.dcPowerConfigured).toBe(false);
+    expect(data.rvData.rvDcConsumption).toBe(22.8);
+  });
+
+  test("zero battery net power leaves the calculated source sum unchanged", () => {
+    const { data } = renderRvFlowScenario({
+      acOutput: 7.1,
+      solarOutput: 25.58,
+      boosterOutput: 0,
+      batteryNet: 0,
+    });
+
+    expect(data.rvData.cabinBattery.measuredIn).toBe(0);
+    expect(data.rvData.cabinBattery.measuredOut).toBe(0);
+    expect(data.rvData.loads.dcPowerConfigured).toBe(false);
+    expect(data.rvData.rvDcConsumption).toBeCloseTo(32.68, 10);
+  });
+
   test("mixed RV sources balance only at the DC bus without classic direct flows", () => {
     const { container, data } = renderRvFlowScenario({
       acOutput: 204,
