@@ -104,6 +104,16 @@ export const rvStyles = css`
     stroke-width: 4;
   }
 
+  path.rv-shore-ac-load-path,
+  circle.rv-shore-ac-load-dot {
+    stroke: var(--rv-ac-power-color, #d32f2f);
+  }
+
+  circle.rv-shore-ac-load-dot {
+    fill: var(--rv-ac-power-color, #d32f2f);
+    stroke-width: 4;
+  }
+
   path.rv-solar-dc-bus-path,
   circle.rv-solar-dc-bus-dot {
     stroke: var(--energy-solar-color, #ff9800);

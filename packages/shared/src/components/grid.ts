@@ -26,9 +26,9 @@ export const gridElement = (
   const disableEntityClick = config.clickable_entities === false;
   return html`<div class="circle-container grid">
     <div
-      class="circle ${rvPower ? "rv-shore-circle" : ""} ${disableEntityClick
-        ? "pointer-events-none"
-        : ""}"
+      class="circle ${rvPower ? "rv-shore-circle" : ""} ${rvPower && rvPower.inputPower <= 0
+        ? "rv-shore-circle--inactive"
+        : ""} ${disableEntityClick ? "pointer-events-none" : ""}"
       @click=${(e: MouseEvent) => {
         const outageTarget =
           grid.powerOutage?.entityGenerator ?? entities.grid?.power_outage?.entity;

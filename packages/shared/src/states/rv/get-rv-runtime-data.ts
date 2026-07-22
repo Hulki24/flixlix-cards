@@ -284,8 +284,12 @@ export function getRvRuntimeData(
   const batteryFlows = normalizeRvBatteryFlows(Math.max(netPower, 0), Math.max(-netPower, 0));
   const totalPower =
     resolveFirstAvailablePower(hass, rv?.loads?.total_power, ...legacyTotalLoadEntities) ?? 0;
-  const acPower =
-    resolveFirstAvailablePower(hass, rv?.loads?.ac_power, ...legacyAcLoadEntities) ?? 0;
+  const structuredAcLoadEntity = firstConfiguredEntity(rv?.loads?.ac_power);
+  const acEntity = structuredAcLoadEntity ?? firstConfiguredEntity(...legacyAcLoadEntities);
+  const resolvedAcPower = resolveEntityPower(hass, acEntity);
+  const acPowerConfigured = acEntity !== undefined;
+  const acPowerAvailable = resolvedAcPower !== null;
+  const acPower = Math.max(resolvedAcPower ?? 0, 0);
   const dcPowerCandidates = [rv?.loads?.dc_power, ...legacyDcLoadEntities];
   const resolvedDcPower = resolveFirstAvailablePower(hass, ...dcPowerCandidates);
   const dcPowerConfigured = resolvedDcPower !== null;
@@ -403,6 +407,9 @@ export function getRvRuntimeData(
     loads: {
       totalPower,
       acPower,
+      acPowerConfigured,
+      acPowerAvailable,
+      acEntity,
       dcPower,
       dcPowerConfigured,
     },

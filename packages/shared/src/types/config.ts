@@ -1,4 +1,5 @@
 import {
+  type ActionConfigSet,
   type BaseConfigEntity,
   type ComboEntity,
   type GridPowerOutage,
@@ -185,6 +186,18 @@ export interface RvLoadsConfig {
   total_power?: EntityId;
   ac_power?: EntityId;
   dc_power?: EntityId;
+  ac_display?: RvAcLoadDisplayConfig;
+}
+
+export interface RvAcLoadDisplayConfig extends ActionConfigSet {
+  name?: string;
+  icon?: string;
+  color?: string | number[];
+  decimals?: number;
+  unit_of_measurement?: string;
+  unit_white_space?: boolean;
+  display_zero?: boolean;
+  secondary_info?: SecondaryInfoType;
 }
 
 export interface RvConfig {

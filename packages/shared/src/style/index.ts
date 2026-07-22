@@ -61,6 +61,10 @@ export const styles = css`
     --text-battery-in-color: var(--energy-battery-in-color);
     --text-battery-out-color: var(--energy-battery-out-color);
     --home-circle-animation: rotate-in 0.6s ease-in;
+    --rv-ac-power-color: var(
+      --rv-configured-ac-power-color,
+      var(--energy-shore-ac-input-color, #d32f2f)
+    );
   }
 
   ha-card {
@@ -520,20 +524,44 @@ export const styles = css`
     padding: 0;
   }
   .rv-shore-power-arrow--ac {
-    color: var(--energy-shore-ac-input-color, var(--energy-grid-return-color, #a280db));
+    color: var(--rv-ac-power-color);
   }
   .rv-shore-power-arrow--dc {
     color: var(--energy-grid-consumption-color, #488fc2);
   }
   .rv-shore-power-value {
-    color: var(--primary-text-color);
     font-weight: 500;
     overflow: visible;
+  }
+  .rv-shore-ac-input .rv-shore-power-value,
+  .rv-shore-circle .secondary-info.grid,
+  .rv-shore-circle .secondary-info.grid ha-icon {
+    color: var(--rv-ac-power-color);
   }
   .rv-shore-ac-input .rv-shore-power-value {
     font-weight: 600;
   }
+  .rv-shore-dc-output .rv-shore-power-value {
+    color: var(--energy-grid-consumption-color, #488fc2);
+  }
   .rv-shore-power-row--inactive {
+    opacity: 0.55;
+  }
+  .rv-shore-circle--inactive .secondary-info.grid {
+    opacity: 0.55;
+  }
+  .circle-container.rv-ac-load {
+    height: 130px;
+  }
+  .rv-ac-load .circle {
+    border-color: var(--rv-ac-power-color);
+  }
+  .rv-ac-load .circle > ha-icon:not(.secondary-info),
+  .rv-ac-load .rv-ac-load-value,
+  .rv-ac-load .secondary-info {
+    color: var(--rv-ac-power-color);
+  }
+  .rv-ac-load--inactive .circle {
     opacity: 0.55;
   }
   .home .circle {

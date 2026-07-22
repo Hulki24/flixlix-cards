@@ -45,6 +45,9 @@ export interface RvStarterBatteryRuntimeData {
 export interface RvLoadsRuntimeData {
   totalPower: number;
   acPower: number;
+  acPowerConfigured: boolean;
+  acPowerAvailable: boolean;
+  acEntity?: string;
   dcPower: number;
   dcPowerConfigured: boolean;
 }

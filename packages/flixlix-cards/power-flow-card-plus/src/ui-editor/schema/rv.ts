@@ -95,6 +95,36 @@ const starterSecondaryInfo = {
   schema: [decimalsField, unitField, displayZeroField],
 } as const;
 
+const acLoadSecondaryInfo = {
+  name: "secondary_info",
+  title: localize("editor.secondary_info"),
+  type: "expandable",
+  schema: [
+    entityField("entity", localize("editor.entity")),
+    { name: "icon", label: localize("editor.icon"), selector: { icon: {} } },
+    decimalsField,
+    unitField,
+    {
+      name: "unit_white_space",
+      label: localize("editor.unit_white_space"),
+      selector: { boolean: {} },
+    },
+    displayZeroField,
+  ],
+} as const;
+
+const acLoadDisplay = {
+  name: "ac_display",
+  title: localize("editor.rv_ac_display_options"),
+  type: "expandable",
+  schema: [
+    ...commonDisplayFields,
+    { name: "color", label: localize("editor.color"), selector: { color_rgb: {} } },
+    displayZeroField,
+    acLoadSecondaryInfo,
+  ],
+} as const;
+
 export const rvEditorSchema = [
   {
     name: "shore",
@@ -210,6 +240,7 @@ export const rvEditorSchema = [
       entityField("total_power", localize("editor.rv_total_power")),
       entityField("ac_power", localize("editor.rv_ac_power")),
       entityField("dc_power", localize("editor.rv_dc_power")),
+      acLoadDisplay,
       displayGroup([...commonDisplayFields, colorValueField, displayZeroField, secondaryInfoField]),
     ],
   },

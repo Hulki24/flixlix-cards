@@ -112,7 +112,7 @@ describe("power flow ui editor", () => {
         "color",
         "secondary_info",
       ],
-      loads: ["total_power", "ac_power", "dc_power", "display"],
+      loads: ["total_power", "ac_power", "dc_power", "ac_display", "display"],
     });
   });
 
@@ -289,7 +289,54 @@ describe("power flow ui editor", () => {
     expect(displayNames("cabin_battery")).toContain("state_of_charge_decimals");
     expect(displayNames("cabin_battery")).toContain("show_state_of_charge");
     expect(displayNames("loads")).toContain("secondary_info");
+    const acDisplay = groups.loads.schema.find((field) => field.name === "ac_display") as any;
+    expect(acDisplay.schema.map((field: any) => field.name)).toEqual([
+      "name",
+      "icon",
+      "decimals",
+      "unit_of_measurement",
+      "color",
+      "display_zero",
+      "secondary_info",
+    ]);
     expect(groups.booster.schema.map((field) => field.name)).not.toContain("icon");
+  });
+
+  test("AC load display options stay under rv.loads and retain explicit zero decimals", () => {
+    const current = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.shore" }, home: { entity: "sensor.home" } },
+      rv: { loads: { ac_power: "sensor.ac_load", dc_power: "sensor.dc_load" } },
+    } as any;
+    const value = buildRvEditorData(current);
+    value.loads = {
+      ...(value.loads as Record<string, unknown>),
+      ac_display: {
+        name: "230 V",
+        icon: "mdi:power-socket-eu",
+        color: [211, 47, 47],
+        decimals: 0,
+        unit_of_measurement: "W",
+        display_zero: false,
+        secondary_info: {
+          entity: "sensor.ac_daily",
+          decimals: 1,
+          unit_of_measurement: "kWh",
+        },
+      },
+    };
+
+    const updated = applyRvEditorValue(current, value);
+
+    expect(updated.rv?.loads?.ac_display).toMatchObject({
+      name: "230 V",
+      decimals: 0,
+      display_zero: false,
+    });
+    expect(updated.rv?.loads?.ac_power).toBe("sensor.ac_load");
+    expect(updated.rv?.loads?.dc_power).toBe("sensor.dc_load");
+    expect(updated.entities.home).toEqual({ entity: "sensor.home" });
   });
 
   test("RV editor translations name loads as RV in English and German", () => {
@@ -391,6 +438,20 @@ describe("power flow ui editor", () => {
           total_power: "sensor.rv_total_power",
           ac_power: "sensor.rv_ac_power",
           dc_power: "sensor.rv_dc_power",
+          ac_display: {
+            name: "230 V",
+            icon: "mdi:power-socket-eu",
+            color: [211, 47, 47],
+            decimals: 0,
+            unit_of_measurement: "W",
+            display_zero: false,
+            secondary_info: {
+              entity: "sensor.rv_ac_daily",
+              decimals: 1,
+              unit_of_measurement: "kWh",
+              display_zero: true,
+            },
+          },
         },
       },
     } as any;
@@ -424,6 +485,7 @@ describe("power flow ui editor", () => {
     { cabin_battery: { charging_state: "invalid" } },
     { starter_battery: { voltage: ["sensor.voltage"] } },
     { loads: { total_power: { entity: "sensor.loads" } } },
+    { loads: { ac_display: { decimals: "0" } } },
   ])("invalid neutral RV field types or entity IDs are rejected", async (rv) => {
     const editor = new PowerFlowCardPlusEditor();
     const config = {

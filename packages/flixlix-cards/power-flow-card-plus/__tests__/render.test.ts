@@ -103,6 +103,7 @@ function renderRvFlowScenario({
   solarOutput = 0,
   solarState = "unknown",
   batteryNet = 0,
+  acPower,
   dcPower,
   boosterInput,
   boosterOutput,
@@ -119,6 +120,7 @@ function renderRvFlowScenario({
   solarOutput?: number;
   solarState?: string;
   batteryNet?: number;
+  acPower?: number | "unavailable";
   dcPower?: number | "unavailable";
   boosterInput?: number;
   boosterOutput?: number;
@@ -172,7 +174,14 @@ function renderRvFlowScenario({
             },
           }
         : {}),
-      ...(dcPower === undefined ? {} : { loads: { dc_power: "sensor.dc_load" } }),
+      ...(dcPower === undefined && acPower === undefined
+        ? {}
+        : {
+            loads: {
+              ...(acPower === undefined ? {} : { ac_power: "sensor.ac_load" }),
+              ...(dcPower === undefined ? {} : { dc_power: "sensor.dc_load" }),
+            },
+          }),
     },
   } as PowerFlowCardPlusConfig;
   const hass = makeHass({
@@ -199,6 +208,7 @@ function renderRvFlowScenario({
           "sensor.starter_power": String(starterPower ?? 0),
         }
       : {}),
+    ...(acPower === undefined ? {} : { "sensor.ac_load": String(acPower) }),
     ...(dcPower === undefined ? {} : { "sensor.dc_load": String(dcPower) }),
   });
 
@@ -303,6 +313,9 @@ declare function computeRenderDataShape(): {
     loads: {
       totalPower: number;
       acPower: number;
+      acPowerConfigured: boolean;
+      acPowerAvailable: boolean;
+      acEntity?: string;
       dcPower: number;
       dcPowerConfigured: boolean;
     };
@@ -423,11 +436,127 @@ describe("render", () => {
   test("RV shore arrow colors distinguish AC input and match the DC bus flow", () => {
     const cssText = cardStyles.cssText;
 
+    expect(cssText).toMatch(/--rv-ac-power-color:[^;]*#d32f2f/);
+    expect(cssText).toMatch(/rv-shore-power-arrow--ac[\s\S]*var\(--rv-ac-power-color\)/);
     expect(cssText).toMatch(
-      /rv-shore-power-arrow--ac[\s\S]*energy-shore-ac-input-color[\s\S]*energy-grid-return-color/
+      /rv-shore-ac-input \.rv-shore-power-value,[\s\S]*secondary-info\.grid[\s\S]*var\(--rv-ac-power-color\)/
     );
     expect(cssText).toMatch(/rv-shore-power-arrow--dc[\s\S]*energy-grid-consumption-color/);
+    expect(cssText).toMatch(
+      /rv-shore-dc-output \.rv-shore-power-value[\s\S]*energy-grid-consumption-color/
+    );
     expect(cssText).toMatch(/rv-shore-dc-bus-path[\s\S]*energy-grid-consumption-color/);
+  });
+
+  test("RV renders explicit AC loads separately without changing the DC residual", () => {
+    const { container, data } = renderRvFlowScenario({
+      shoreInput: 927,
+      acOutput: 38.64,
+      solarOutput: 11.05,
+      batteryNet: 13.7,
+      acPower: 850,
+    });
+
+    expect(data.rvData.loads.acPower).toBe(850);
+    expect(data.rvData.rvDcConsumption).toBeCloseTo(35.99, 10);
+    expect(container.querySelector("#rv-ac-load")?.textContent).toContain("850");
+    expect(container.querySelector("#rv-ac-load-icon")?.getAttribute("icon")).toBeNull();
+    expect((container.querySelector("#rv-ac-load-icon") as any)?.icon).toBe("mdi:power-socket-eu");
+    expect(
+      container.querySelector("#rv-shore-ac-load-flow")?.getAttribute("data-power-watts")
+    ).toBe("850");
+    expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "38.64"
+    );
+    expect(
+      Number(container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts"))
+    ).toBeCloseTo(35.99, 10);
+    expect(container.querySelector(".circle-container.home")?.textContent).toContain("36");
+  });
+
+  test.each([
+    { acPower: 0 as const, label: "zero" },
+    { acPower: "unavailable" as const, label: "unavailable" },
+  ])("RV AC load $label never renders a flow", ({ acPower }) => {
+    const { container, data } = renderRvFlowScenario({ shoreInput: 927, acPower });
+
+    expect(data.rvData.loads.acPower).toBe(0);
+    expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
+    expect(container.querySelector("#rv-ac-load")).not.toBeNull();
+    expect(container.querySelector("#rv-ac-load")?.getAttribute("data-active")).toBe("false");
+  });
+
+  test("RV AC display_zero false hides a zero load bubble", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.shore" } },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        loads: { ac_power: "sensor.ac_load", ac_display: { display_zero: false } },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { container } = renderCard(
+      config,
+      makeHass({ "sensor.shore": "927", "sensor.ac_load": "0" })
+    );
+
+    expect(container.querySelector("#rv-ac-load")).toBeNull();
+    expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
+  });
+
+  test("RV AC load display options affect the visible component", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      base_decimals: 0,
+      entities: { grid: { entity: "sensor.shore" } },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        loads: {
+          ac_power: "sensor.ac_load",
+          ac_display: {
+            name: "Steckdosen",
+            icon: "mdi:power-socket-de",
+            color: [200, 20, 30],
+            decimals: 1,
+            unit_of_measurement: "W",
+            secondary_info: {
+              entity: "sensor.ac_daily",
+              icon: "mdi:counter",
+              decimals: 1,
+              unit_of_measurement: "kWh",
+            },
+          },
+        },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { card, container } = renderCard(
+      config,
+      makeHass({
+        "sensor.shore": "100",
+        "sensor.ac_load": "17.14",
+        "sensor.ac_daily": "12.34",
+      })
+    );
+
+    expect(container.querySelector("#rv-ac-load")?.textContent).toContain("Steckdosen");
+    expect(container.querySelector("#rv-ac-load .rv-ac-load-value")?.textContent).toMatch(
+      /17[,.]1\s*W/
+    );
+    expect(container.querySelector("#rv-ac-load .secondary-info")?.textContent).toMatch(
+      /12[,.]3\s*kWh/
+    );
+    expect((container.querySelector("#rv-ac-load-icon") as any)?.icon).toBe("mdi:power-socket-de");
+    expect((card as any).style.getPropertyValue("--rv-configured-ac-power-color")).toBe("#c8141e");
+  });
+
+  test("stale AC load remains inactive when shore input is zero", () => {
+    const { container, data } = renderRvFlowScenario({ shoreInput: 0, acPower: 850 });
+
+    expect(data.rvData.loads.acPower).toBe(850);
+    expect(container.querySelector("#rv-ac-load")?.getAttribute("data-active")).toBe("false");
+    expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
   });
 
   test("RV shore bubble retains configured secondary information", () => {
@@ -1841,12 +1970,50 @@ describe("_computeRenderData", () => {
     expect(data.rvData.cabinBattery.netPower).toBe(75);
     expect(data.rvData.loads.dcPower).toBe(45);
     expect(data.rvData.loads.acPower).toBe(15);
+    expect(data.rvData.loads.acPowerConfigured).toBe(true);
+    expect(container.querySelector("#rv-ac-load")).not.toBeNull();
+    expect(
+      container.querySelector("#rv-shore-ac-load-flow")?.getAttribute("data-power-watts")
+    ).toBe("15");
     expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-booster-to-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#grid-home-flow")).toBeNull();
     expect(container.querySelector("#solar-home-flow")).toBeNull();
   });
+
+  test.each([
+    { structuredState: "0", expectedAvailable: true },
+    { structuredState: "unavailable", expectedAvailable: false },
+  ])(
+    "structured AC load $structuredState does not fall back to a positive legacy load",
+    ({ structuredState, expectedAvailable }) => {
+      const config = {
+        type: "custom:power-flow-card-plus",
+        rv_mode: true,
+        entities: { grid: { entity: "sensor.shore" } },
+        rv: {
+          shore: { input_power: "sensor.shore" },
+          loads: { ac_power: "sensor.structured_ac" },
+          ac_load: { entity: "sensor.legacy_ac" },
+        },
+      } as PowerFlowCardPlusConfig;
+      const { card, container } = renderCard(
+        config,
+        makeHass({
+          "sensor.shore": "927",
+          "sensor.structured_ac": structuredState,
+          "sensor.legacy_ac": "850",
+        })
+      );
+      const data = card._computeRenderData();
+
+      expect(data.rvData.loads.acPower).toBe(0);
+      expect(data.rvData.loads.acPowerAvailable).toBe(expectedAvailable);
+      expect(data.rvData.loads.acEntity).toBe("sensor.structured_ac");
+      expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
+    }
+  );
 
   test("a structured starter suppresses only its matching legacy individual", () => {
     const base = {

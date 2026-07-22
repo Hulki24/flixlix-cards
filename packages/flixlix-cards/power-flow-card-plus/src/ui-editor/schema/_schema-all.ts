@@ -107,6 +107,30 @@ export const rvConfigStruct = object({
       total_power: optional(entityIdStruct),
       ac_power: optional(entityIdStruct),
       dc_power: optional(entityIdStruct),
+      ac_display: optional(
+        object({
+          name: optional(string()),
+          icon: optional(string()),
+          color: optional(any()),
+          decimals: optional(integer()),
+          unit_of_measurement: optional(string()),
+          unit_white_space: optional(boolean()),
+          display_zero: optional(boolean()),
+          secondary_info: optional(
+            object({
+              entity: optional(entityIdStruct),
+              icon: optional(string()),
+              decimals: optional(integer()),
+              unit_of_measurement: optional(string()),
+              unit_white_space: optional(boolean()),
+              display_zero: optional(boolean()),
+            })
+          ),
+          tap_action: optional(any()),
+          hold_action: optional(any()),
+          double_tap_action: optional(any()),
+        })
+      ),
     })
   ),
 

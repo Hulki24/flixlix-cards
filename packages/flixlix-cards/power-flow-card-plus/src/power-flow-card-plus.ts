@@ -8,6 +8,7 @@ import { individualRightBottomElement } from "@flixlix-cards/shared/components/i
 import { individualRightTopElement } from "@flixlix-cards/shared/components/individual-right-top-element";
 import { dashboardLinkElement } from "@flixlix-cards/shared/components/misc/dashboard-link";
 import { nonFossilElement } from "@flixlix-cards/shared/components/non-fossil";
+import { acLoadElement } from "@flixlix-cards/shared/components/rv/ac-load";
 import { boosterNodeElement } from "@flixlix-cards/shared/components/rv/booster-node";
 import { dcBusElement } from "@flixlix-cards/shared/components/rv/dc-bus";
 import { starterBatteryElement } from "@flixlix-cards/shared/components/rv/starter-battery";
@@ -49,7 +50,7 @@ import { adjustZeroTolerance } from "@flixlix-cards/shared/states/tolerance/base
 import { doesEntityExist } from "@flixlix-cards/shared/states/utils/existence-entity";
 import { getEntityState } from "@flixlix-cards/shared/states/utils/get-entity-state";
 import { getEntityStateWatts } from "@flixlix-cards/shared/states/utils/get-entity-state-watts";
-import { allDynamicStyles, styles } from "@flixlix-cards/shared/style";
+import { allDynamicStyles, convertColorListToHex, styles } from "@flixlix-cards/shared/style";
 import {
   type ActionConfigSet,
   type GridObject,
@@ -123,6 +124,7 @@ export class PowerFlowCardPlus extends LitElement {
   @query("#solar-grid-flow") solarToGridFlow?: SVGSVGElement;
   @query("#solar-home-flow") solarToHomeFlow?: SVGSVGElement;
   @query("#rv-shore-dc-bus-flow") shoreToDcBusFlow?: SVGSVGElement;
+  @query("#rv-shore-ac-load-flow") shoreToAcLoadFlow?: SVGSVGElement;
   @query("#rv-solar-dc-bus-flow") solarToDcBusFlow?: SVGSVGElement;
   @query("#rv-dc-bus-to-cabin-battery-flow") dcBusToCabinBatteryFlow?: SVGSVGElement;
   @query("#rv-cabin-battery-to-dc-bus-flow") cabinBatteryToDcBusFlow?: SVGSVGElement;
@@ -444,6 +446,13 @@ export class PowerFlowCardPlus extends LitElement {
         unitWhiteSpace: field?.unit_white_space,
       });
     };
+    const acLoadDisplay = this._config.rv?.loads?.ac_display;
+    const showAcLoad =
+      rvMode &&
+      rvData.loads.acPowerConfigured &&
+      (acLoadDisplay?.display_zero !== false || rvData.loads.acPower > 0);
+    const acLoadActive =
+      rvData.loads.acPowerAvailable && rvData.shore.inputPower > 0 && rvData.loads.acPower > 0;
 
     return html`
       <ha-card
@@ -458,17 +467,20 @@ export class PowerFlowCardPlus extends LitElement {
           id="power-flow-card-plus"
           style=${this._config.style_card_content ? this._config.style_card_content : ""}
         >
-          ${solar.has ||
+          ${showAcLoad ||
+          solar.has ||
           individualObjs?.some((individual) => individual?.has) ||
           nonFossil.hasPercentage
             ? html`<div class="row">
-                ${nonFossilElement(this, this._config, {
-                  entities,
-                  grid,
-                  newDur,
-                  nonFossil,
-                  templatesObj,
-                })}
+                ${showAcLoad
+                  ? acLoadElement(this, this._config, rvData.loads, acLoadDisplay, acLoadActive)
+                  : nonFossilElement(this, this._config, {
+                      entities,
+                      grid,
+                      newDur,
+                      nonFossil,
+                      templatesObj,
+                    })}
                 ${solar.has
                   ? solarElement(this, this._config, {
                       entities,
@@ -661,7 +673,6 @@ export class PowerFlowCardPlus extends LitElement {
       rvData.cabinBattery.measuredIn,
       rvData.cabinBattery.measuredOut,
       rvData.loads.totalPower,
-      rvData.loads.acPower,
       rvData.loads.dcPower,
       rvData.rvDcConsumption,
     ].some((value) => value !== 0);
@@ -1082,6 +1093,7 @@ export class PowerFlowCardPlus extends LitElement {
         (battery.state.toHome ?? 0) +
         (grid.state.toBattery ?? 0) +
         (battery.state.toGrid ?? 0);
+    const rvAcTotalLines = totalLines + Math.max(rvData.loads.acPower, 0);
     if (battery.state_of_charge.state === null) {
       battery.icon = "mdi:battery";
     } else if (battery.state_of_charge.state <= 72 && battery.state_of_charge.state > 44) {
@@ -1118,6 +1130,7 @@ export class PowerFlowCardPlus extends LitElement {
       ...(rvMode
         ? {
             shoreToDcBus: computeFlowRate(this._config, rvData.acCharger.outputPower, totalLines),
+            shoreToAcLoad: computeFlowRate(this._config, rvData.loads.acPower, rvAcTotalLines),
             solarToDcBus: computeFlowRate(
               this._config,
               rvData.solarCharger.outputPower,
@@ -1148,6 +1161,7 @@ export class PowerFlowCardPlus extends LitElement {
         | "solarToGrid"
         | "solarToHome"
         | "shoreToDcBus"
+        | "shoreToAcLoad"
         | "solarToDcBus"
         | "dcBusToCabinBattery"
         | "cabinBatteryToDcBus"
@@ -1156,6 +1170,7 @@ export class PowerFlowCardPlus extends LitElement {
         | "boosterToDcBus";
       const flowNames: AnimatedFlowName[] = rvMode
         ? [
+            "shoreToAcLoad",
             "shoreToDcBus",
             "solarToDcBus",
             "dcBusToCabinBattery",
@@ -1271,6 +1286,18 @@ export class PowerFlowCardPlus extends LitElement {
         isCardWideEnough,
       } as any
     );
+    const configuredAcColor =
+      this._config.rv?.loads?.ac_display?.color ?? entities.grid?.color?.production;
+    if (rvMode && configuredAcColor) {
+      this.style.setProperty(
+        "--rv-configured-ac-power-color",
+        Array.isArray(configuredAcColor)
+          ? convertColorListToHex(configuredAcColor)
+          : configuredAcColor
+      );
+    } else {
+      this.style.removeProperty("--rv-configured-ac-power-color");
+    }
     return {
       entities,
       grid,

@@ -136,6 +136,7 @@ export type NewDur = {
   individual: number[];
   nonFossil: number;
   shoreToDcBus?: number;
+  shoreToAcLoad?: number;
   solarToDcBus?: number;
   dcBusToCabinBattery?: number;
   cabinBatteryToDcBus?: number;
