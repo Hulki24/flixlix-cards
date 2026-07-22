@@ -729,12 +729,13 @@ export class PowerFlowCardPlus extends LitElement {
     const initialNumericState = null as null | number;
     const distributionDisplayZero =
       this._config.rv?.shore?.distribution_display?.display_zero ?? entities.grid?.display_zero;
+    const distributionConfigured = rvData.loads.acPowerConfigured || rvData.acCharger.has;
     const distributionHasPower =
       rvData.shore.inputPower > 0 || rvData.loads.acPower > 0 || rvData.acCharger.outputPower > 0;
     const grid: GridObject = {
       entity: entities.grid?.entity,
       has: rvMode
-        ? rvData.shore.has && (distributionDisplayZero !== false || distributionHasPower)
+        ? distributionConfigured && (distributionDisplayZero !== false || distributionHasPower)
         : entities?.grid?.entity !== undefined,
       hasReturnToGrid:
         typeof entities.grid?.entity === "string" || !!entities.grid?.entity?.production,
@@ -988,7 +989,7 @@ export class PowerFlowCardPlus extends LitElement {
       entities.grid?.display_zero_tolerance
     );
     const hasGridFlow = (grid.state.fromGrid ?? 0) !== 0 || (grid.state.toGrid ?? 0) !== 0;
-    if (entities.grid?.display_zero === false && !hasGridFlow) {
+    if (!rvMode && entities.grid?.display_zero === false && !hasGridFlow) {
       grid.has = false;
     }
     solar.state.total = adjustZeroTolerance(

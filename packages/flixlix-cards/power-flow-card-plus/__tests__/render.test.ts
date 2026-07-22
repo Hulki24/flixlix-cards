@@ -434,6 +434,76 @@ describe("render", () => {
     expect(container.querySelector("#rv-dc-bus-to-rv-flow")).not.toBeNull();
   });
 
+  test("structured RV YAML renders distribution defaults without display blocks", () => {
+    const { container, data } = renderRvFlowScenario({
+      shoreInput: 894,
+      acPower: 855,
+      acOutput: 33,
+    });
+    const distribution = container.querySelector(".circle-container.grid");
+
+    expect(data.rvData.loads.acPower).toBe(855);
+    expect(data.rvData.acCharger.outputPower).toBe(33);
+    expect(container.querySelector("#rv-shore-total")?.textContent).toContain("894");
+    expect(distribution).not.toBeNull();
+    expect(distribution?.querySelector(".label")?.textContent).toBe("Distribution");
+    expect((distribution?.querySelector("#grid-icon") as any)?.icon).toBe(
+      "mdi:transit-connection-variant"
+    );
+    expect(distribution?.querySelector(".rv-shore-ac-input")?.textContent).toContain("855");
+    expect(distribution?.querySelector(".rv-shore-dc-output")?.textContent).toContain("33");
+    expect(
+      container.querySelector("#rv-shore-distribution-flow")?.getAttribute("data-power-watts")
+    ).toBe("894");
+    expect(
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
+    ).toBe("855");
+    expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "33"
+    );
+  });
+
+  test.each([
+    { acPower: 0, acOutput: 33, absentFlow: "#rv-distribution-to-rv-ac-flow" },
+    { acPower: 855, acOutput: 0, absentFlow: "#rv-shore-dc-bus-flow" },
+  ])(
+    "RV distribution remains visible when one output is zero",
+    ({ acPower, acOutput, absentFlow }) => {
+      const { container } = renderRvFlowScenario({ shoreInput: 894, acPower, acOutput });
+
+      expect(container.querySelector(".circle-container.grid")).not.toBeNull();
+      expect(container.querySelector(absentFlow)).toBeNull();
+    }
+  );
+
+  test("configured AC/DC outputs show the distribution without a structured shore group", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.classic_grid" },
+        home: { entity: "sensor.home" },
+      },
+      rv: {
+        ac_charger: { output_power: "sensor.ac_output" },
+        loads: { ac_power: "sensor.ac_load" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { container } = renderCard(
+      config,
+      makeHass({
+        "sensor.classic_grid": "0",
+        "sensor.home": "0",
+        "sensor.ac_output": "33",
+        "sensor.ac_load": "855",
+      })
+    );
+
+    expect(container.querySelector(".circle-container.grid")).not.toBeNull();
+    expect(container.querySelector(".rv-shore-ac-input")?.textContent).toContain("855");
+    expect(container.querySelector(".rv-shore-dc-output")?.textContent).toContain("33");
+  });
+
   test("RV shore arrow values honor one component decimal over the global fallback", () => {
     const { container } = renderRvFlowScenario({
       shoreInput: 17.14,

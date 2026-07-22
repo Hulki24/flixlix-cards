@@ -140,15 +140,22 @@ export function buildRvEditorData(config: PowerFlowCardPlusConfig): Record<strin
   for (const group of Object.keys(RV_DISPLAY_TARGETS) as RvDisplayGroup[]) {
     const target = RV_DISPLAY_TARGETS[group];
     const rvGroup = (rv[group] ?? {}) as Record<string, unknown>;
+    const display = pickDisplayValues(
+      config.entities[target] as unknown as Record<string, unknown> | undefined,
+      RV_DISPLAY_KEYS[group]
+    );
     data[group] = {
       ...rvGroup,
-      display: pickDisplayValues(
-        config.entities[target] as unknown as Record<string, unknown> | undefined,
-        RV_DISPLAY_KEYS[group]
-      ),
+      ...(Object.keys(display).length > 0 ? { display } : {}),
     };
   }
   return data;
+}
+
+export function shouldShowRvEditor(config?: PowerFlowCardPlusConfig): boolean {
+  if (!config) return false;
+  const hasRvConfig = Object.prototype.hasOwnProperty.call(config, "rv") && config.rv !== undefined;
+  return resolveRvMode(config) || hasRvConfig;
 }
 
 export function applyRvEditorValue(
@@ -210,7 +217,7 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
   }
 
   private _shouldShowRvEditor(): boolean {
-    return !!this._config && (resolveRvMode(this._config) || this._config.rv !== undefined);
+    return shouldShowRvEditor(this._config);
   }
 
   private _renderRvHelp() {

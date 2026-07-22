@@ -8,6 +8,7 @@ import {
   applyRvEditorValue,
   buildRvEditorData,
   PowerFlowCardPlusEditor,
+  shouldShowRvEditor,
 } from "../src/ui-editor/ui-editor";
 
 const { loadHaFormMock } = vi.hoisted(() => ({
@@ -142,6 +143,49 @@ describe("power flow ui editor", () => {
     });
 
     expect(container.querySelector('link-subpage[path="rv"]')).not.toBeNull();
+  });
+
+  test("RV editor visibility uses top-level mode precedence and any structured RV block", () => {
+    const base = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.grid" } },
+    } as any;
+
+    expect(shouldShowRvEditor({ ...base, rv: { loads: { ac_power: "sensor.ac" } } })).toBe(true);
+    expect(shouldShowRvEditor({ ...base, rv_mode: true })).toBe(true);
+    expect(shouldShowRvEditor({ ...base, main_config: { rv_mode: true } })).toBe(true);
+    expect(shouldShowRvEditor({ ...base, rv_mode: false, main_config: { rv_mode: true } })).toBe(
+      false
+    );
+  });
+
+  test("structured RV config without display blocks opens without mutation or config-changed", async () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.shore" } },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        ac_charger: { output_power: "sensor.ac_output" },
+        loads: { ac_power: "sensor.ac_load" },
+      },
+    } as any;
+    const original = structuredClone(config);
+    const editor = new PowerFlowCardPlusEditor();
+    const configChanged = vi.fn();
+    editor.addEventListener("config-changed", configChanged);
+    (editor as any).hass = { localize: vi.fn(() => undefined) };
+
+    await editor.setConfig(config);
+    const container = document.createElement("div");
+    renderTemplate((editor as any).render(), container);
+    const editorData = buildRvEditorData(config);
+
+    expect(container.querySelector('link-subpage[path="rv"]')).not.toBeNull();
+    expect((editorData.shore as any).total_display).toBeUndefined();
+    expect((editorData.shore as any).distribution_display).toBeUndefined();
+    expect((editorData.loads as any).display).toBeUndefined();
+    expect(config).toEqual(original);
+    expect(configChanged).not.toHaveBeenCalled();
   });
 
   test("RV subpage uses the structured schema and displays all help texts", async () => {
