@@ -24,8 +24,6 @@ export const gridElement = (
   }
 ) => {
   const disableEntityClick = config.clickable_entities === false;
-  const rvPowerDecimals = (value: number) =>
-    Number.isInteger(value) ? undefined : Math.max(config.base_decimals ?? 0, 1);
   return html`<div class="circle-container grid">
     <div
       class="circle ${rvPower ? "rv-shore-circle" : ""} ${disableEntityClick
@@ -97,12 +95,11 @@ export const gridElement = (
                 ? ""
                 : "rv-shore-power-row--inactive"}"
             >
-              <span class="rv-shore-power-label">AC in</span>
+              <span class="rv-shore-power-arrow" aria-hidden="true">→</span>
               <span class="rv-shore-power-value" data-power-watts=${rvPower.inputPower}
                 >${displayValue(main.hass, config, rvPower.inputPower, {
                   unit: grid.unit,
                   unitWhiteSpace: grid.unit_white_space,
-                  decimals: rvPowerDecimals(rvPower.inputPower),
                 })}</span
               >
             </span>
@@ -112,14 +109,13 @@ export const gridElement = (
                 ? ""
                 : "rv-shore-power-row--inactive"}"
             >
-              <span class="rv-shore-power-label">DC out</span>
               <span class="rv-shore-power-value" data-power-watts=${rvPower.outputPower}
                 >${displayValue(main.hass, config, rvPower.outputPower, {
                   unit: grid.unit,
                   unitWhiteSpace: grid.unit_white_space,
-                  decimals: rvPowerDecimals(rvPower.outputPower),
                 })}</span
               >
+              <span class="rv-shore-power-arrow" aria-hidden="true">→</span>
             </span>
           </div>`
         : nothing}

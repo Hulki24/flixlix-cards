@@ -509,14 +509,14 @@ export const styles = css`
   .rv-shore-power-row {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 3px;
+    justify-content: center;
+    gap: 4px;
     min-width: 0;
     white-space: nowrap;
   }
-  .rv-shore-power-label {
+  .rv-shore-power-arrow {
     color: var(--secondary-text-color);
-    font-size: 9px;
+    font-size: 11px;
   }
   .rv-shore-power-value {
     color: var(--primary-text-color);
