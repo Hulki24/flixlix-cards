@@ -113,7 +113,7 @@ describe("power flow ui editor", () => {
         "color",
         "secondary_info",
       ],
-      loads: ["total_power", "ac_power", "dc_power", "display"],
+      loads: ["total_power", "ac_power", "dc_power", "ac_display", "display"],
     });
   });
 
@@ -350,7 +350,20 @@ describe("power flow ui editor", () => {
     expect(displayNames("cabin_battery")).toContain("state_of_charge_decimals");
     expect(displayNames("cabin_battery")).toContain("show_state_of_charge");
     expect(displayNames("loads")).toContain("secondary_info");
-    expect(groups.loads.schema.map((field) => field.name)).not.toContain("ac_display");
+    const acDisplay = groups.loads.schema.find((field) => field.name === "ac_display") as any;
+    expect(acDisplay.schema.map((field: any) => field.name)).toEqual([
+      "decimals",
+      "display_zero",
+      "minimum_power",
+    ]);
+    const minimumPower = acDisplay.schema.find((field: any) => field.name === "minimum_power");
+    expect(minimumPower.default).toBe(150);
+    expect(minimumPower.selector.number).toMatchObject({
+      min: 0,
+      step: 1,
+      unit_of_measurement: "W",
+    });
+    expect(minimumPower.helper).toContain("Lower measurements");
     expect(groups.booster.schema.map((field) => field.name)).not.toContain("icon");
   });
 
@@ -392,6 +405,29 @@ describe("power flow ui editor", () => {
     expect(updated.rv?.loads?.ac_power).toBe("sensor.ac_load");
     expect(updated.rv?.loads?.dc_power).toBe("sensor.dc_load");
     expect(updated.entities.home).toEqual({ entity: "sensor.home" });
+  });
+
+  test("explicit AC minimum 0 survives editor updates without creating display defaults", async () => {
+    const current = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: { grid: { entity: "sensor.shore" }, home: { entity: "sensor.home" } },
+      rv: {
+        loads: {
+          ac_power: "sensor.ac_load",
+          ac_display: { minimum_power: 0 },
+        },
+      },
+    } as any;
+    const editor = new PowerFlowCardPlusEditor();
+    await expect(editor.setConfig(current)).resolves.toBeUndefined();
+    const data = buildRvEditorData(current);
+    const updated = applyRvEditorValue(current, data);
+
+    expect((data.loads as any).ac_display.minimum_power).toBe(0);
+    expect(updated.rv?.loads?.ac_display?.minimum_power).toBe(0);
+    expect((updated.rv?.shore as any)?.total_display).toBeUndefined();
+    expect((updated.rv?.shore as any)?.distribution_display).toBeUndefined();
   });
 
   test("RV editor translations name loads as RV in English and German", () => {
@@ -541,6 +577,7 @@ describe("power flow ui editor", () => {
     { starter_battery: { voltage: ["sensor.voltage"] } },
     { loads: { total_power: { entity: "sensor.loads" } } },
     { loads: { ac_display: { decimals: "0" } } },
+    { loads: { ac_display: { minimum_power: -1 } } },
   ])("invalid neutral RV field types or entity IDs are rejected", async (rv) => {
     const editor = new PowerFlowCardPlusEditor();
     const config = {

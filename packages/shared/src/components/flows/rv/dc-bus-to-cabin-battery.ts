@@ -7,6 +7,7 @@ import {
 import { html, nothing, svg } from "lit";
 import { classMap } from "lit/directives/class-map.js";
 import { type Flows } from "../index";
+import { RV_DC_FLOW_Y } from "./layout";
 
 export function flowDcBusToCabinBattery(
   config: FlowCardPlusConfig,
@@ -39,7 +40,7 @@ export function flowDcBusToCabinBattery(
       <path
         id="rv-dc-bus-to-cabin-battery-path"
         class="rv-dc-bus-to-cabin-battery-path"
-        d="M50,50 V100"
+        d="M50,${RV_DC_FLOW_Y} V100"
         vector-effect="non-scaling-stroke"
       ></path>
       ${checkShouldShowDots(config)

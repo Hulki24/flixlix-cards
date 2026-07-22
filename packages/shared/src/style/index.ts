@@ -535,15 +535,13 @@ export const styles = css`
     font-weight: 500;
     overflow: visible;
   }
-  .rv-shore-ac-input .rv-shore-power-value,
-  .rv-shore-ac-input .rv-shore-direction-label {
+  .rv-shore-ac-input .rv-shore-power-value {
     color: var(--rv-ac-power-color);
   }
   .rv-shore-ac-input .rv-shore-power-value {
     font-weight: 600;
   }
-  .rv-shore-dc-output .rv-shore-power-value,
-  .rv-shore-dc-output .rv-shore-direction-label {
+  .rv-shore-dc-output .rv-shore-power-value {
     color: var(--energy-grid-consumption-color, #488fc2);
   }
   .rv-shore-power-row--inactive {
@@ -572,6 +570,31 @@ export const styles = css`
   }
   .home ha-icon:not(.small) {
     color: var(--icon-home-color);
+  }
+  .home .circle.rv-home-circle {
+    gap: 3px;
+    justify-content: center;
+  }
+  .rv-home-circle #home-icon {
+    flex: 0 0 24px;
+    padding: 0;
+  }
+  .rv-home-power {
+    max-width: 72px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 12px;
+    overflow: visible;
+    white-space: nowrap;
+  }
+  .rv-home-ac-power {
+    color: var(--rv-ac-power-color);
+  }
+  .rv-home-dc-power {
+    color: var(--energy-rv-load-color, var(--primary-color, #03a9f4));
+  }
+  .rv-home-power--inactive {
+    opacity: 0.55;
   }
   .circle svg circle {
     animation: var(--home-circle-animation);

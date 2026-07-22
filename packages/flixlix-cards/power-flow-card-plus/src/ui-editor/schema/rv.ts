@@ -120,6 +120,23 @@ const distributionDisplay = {
   ],
 } as const;
 
+const acLoadDisplay = {
+  name: "ac_display",
+  title: localize("editor.rv_ac_display_options"),
+  type: "expandable",
+  schema: [
+    decimalsField,
+    displayZeroField,
+    {
+      name: "minimum_power",
+      label: localize("editor.rv_ac_minimum_power"),
+      helper: localize("editor.rv_ac_minimum_power_help"),
+      default: 150,
+      selector: { number: { mode: "box", min: 0, step: 1, unit_of_measurement: "W" } },
+    },
+  ],
+} as const;
+
 export const rvEditorSchema = [
   {
     name: "shore",
@@ -230,6 +247,7 @@ export const rvEditorSchema = [
       entityField("total_power", localize("editor.rv_total_power")),
       entityField("ac_power", localize("editor.rv_ac_power")),
       entityField("dc_power", localize("editor.rv_dc_power")),
+      acLoadDisplay,
       displayGroup([...commonDisplayFields, colorValueField, displayZeroField, secondaryInfoField]),
     ],
   },

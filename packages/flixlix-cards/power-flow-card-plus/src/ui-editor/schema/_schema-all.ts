@@ -67,6 +67,16 @@ const rvBubbleDisplayStruct = object({
   double_tap_action: optional(any()),
 });
 
+const nonNegativeNumberStruct = define<number>(
+  "non-negative number",
+  (value) => typeof value === "number" && Number.isFinite(value) && value >= 0
+);
+
+const rvAcLoadDisplayStruct = assign(
+  rvBubbleDisplayStruct,
+  object({ minimum_power: optional(nonNegativeNumberStruct) })
+);
+
 const rvDistributionDisplayStruct = object({
   name: optional(string()),
   icon: optional(string()),
@@ -140,7 +150,7 @@ export const rvConfigStruct = object({
       total_power: optional(entityIdStruct),
       ac_power: optional(entityIdStruct),
       dc_power: optional(entityIdStruct),
-      ac_display: optional(rvBubbleDisplayStruct),
+      ac_display: optional(rvAcLoadDisplayStruct),
     })
   ),
 

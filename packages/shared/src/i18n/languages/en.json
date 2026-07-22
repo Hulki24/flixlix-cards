@@ -16,6 +16,8 @@
     "rv_ac_charger": "AC Charger",
     "rv_ac_display_options": "230 V display options",
     "rv_ac_input_color": "AC input",
+    "rv_ac_minimum_power": "Minimum power for 230 V loads",
+    "rv_ac_minimum_power_help": "Minimum power for 230 V loads. Lower measurements are not shown as active AC consumption.",
     "rv_ac_power": "AC power",
     "rv_battery_input_color": "Battery input",
     "rv_battery_output_color": "Battery output",

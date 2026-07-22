@@ -81,6 +81,7 @@ import { displayValue } from "@flixlix-cards/shared/utils/display-value";
 import { defaultValues, getDefaultConfig } from "@flixlix-cards/shared/utils/get-default-config";
 import { registerCustomCard } from "@flixlix-cards/shared/utils/register-custom-card";
 import { resolveRvMode } from "@flixlix-cards/shared/utils/resolve-rv-mode";
+import { getVisibleRvAcPower } from "@flixlix-cards/shared/utils/rv-ac-display";
 import { sortIndividualObjects } from "@flixlix-cards/shared/utils/sort-individual-objects";
 import { coerceNumber } from "@flixlix-cards/shared/utils/utils";
 import {
@@ -450,6 +451,13 @@ export class PowerFlowCardPlus extends LitElement {
     };
     const configuredShoreTotalDisplay = this._config.rv?.shore?.total_display;
     const legacyAcDisplay = this._config.rv?.loads?.ac_display;
+    const visibleAcPower = getVisibleRvAcPower(this._config, rvData.loads.acPower);
+    const acDisplayZero = legacyAcDisplay?.display_zero !== false;
+    const rvAcPowerToDisplay = displayValue(this.hass, this._config, visibleAcPower, {
+      unit: legacyAcDisplay?.unit_of_measurement ?? entities.home?.unit_of_measurement,
+      unitWhiteSpace: legacyAcDisplay?.unit_white_space ?? entities.home?.unit_white_space,
+      decimals: legacyAcDisplay?.decimals,
+    });
     const shoreTotalDisplay: RvBubbleDisplayConfig = {
       ...legacyAcDisplay,
       ...configuredShoreTotalDisplay,
@@ -560,16 +568,22 @@ export class PowerFlowCardPlus extends LitElement {
                   rvPower: rvMode
                     ? {
                         shoreInput: rvData.shore.inputPower,
-                        acPower: rvData.loads.acPower,
+                        acPower: visibleAcPower,
                         dcPower: rvData.acCharger.outputPower,
                         display: distributionDisplay,
+                        acDisplay: legacyAcDisplay ?? {},
                       }
                     : undefined,
                 })
               : spacer}
             ${rvMode ? dcBusElement(dcBus) : spacer}
             ${!entities.home?.hide &&
-            !(rvMode && entities.home?.display_zero === false && rvData.rvDcConsumption === 0)
+            !(
+              rvMode &&
+              entities.home?.display_zero === false &&
+              rvData.rvDcConsumption === 0 &&
+              visibleAcPower === 0
+            )
               ? homeElement(this, this._config, {
                   CIRCLE_CIRCUMFERENCE,
                   entities,
@@ -583,6 +597,16 @@ export class PowerFlowCardPlus extends LitElement {
                   templatesObj,
                   homeUsageToDisplay,
                   individual: individualObjs,
+                  rvPower: rvMode
+                    ? {
+                        acPower: visibleAcPower,
+                        acPowerToDisplay: rvAcPowerToDisplay,
+                        dcPower: rvData.rvDcConsumption,
+                        showAcPower: acDisplayZero || visibleAcPower > 0,
+                        showDcPower:
+                          entities.home?.display_zero !== false || rvData.rvDcConsumption > 0,
+                      }
+                    : undefined,
                 })
               : spacer}
             ${checkHasRightIndividual(individualObjs) ? spacer : nothing}
@@ -1140,8 +1164,9 @@ export class PowerFlowCardPlus extends LitElement {
         (battery.state.toHome ?? 0) +
         (grid.state.toBattery ?? 0) +
         (battery.state.toGrid ?? 0);
+    const visibleAcPower = getVisibleRvAcPower(this._config, rvData.loads.acPower);
     const rvAcTotalLines =
-      totalLines + Math.max(rvData.loads.acPower, 0) + Math.max(rvData.shore.inputPower, 0);
+      totalLines + Math.max(visibleAcPower, 0) + Math.max(rvData.shore.inputPower, 0);
     if (battery.state_of_charge.state === null) {
       battery.icon = "mdi:battery";
     } else if (battery.state_of_charge.state <= 72 && battery.state_of_charge.state > 44) {
@@ -1183,7 +1208,7 @@ export class PowerFlowCardPlus extends LitElement {
               rvData.shore.inputPower,
               rvAcTotalLines
             ),
-            distributionToRvAc: computeFlowRate(this._config, rvData.loads.acPower, rvAcTotalLines),
+            distributionToRvAc: computeFlowRate(this._config, visibleAcPower, rvAcTotalLines),
             solarToDcBus: computeFlowRate(
               this._config,
               rvData.solarCharger.outputPower,

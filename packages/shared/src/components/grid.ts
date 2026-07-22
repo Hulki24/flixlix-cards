@@ -3,6 +3,7 @@ import {
   type CardMainContext,
   type ConfigEntities,
   type FlowCardPlusConfig,
+  type RvAcLoadDisplayConfig,
   type RvDistributionDisplayConfig,
   type TemplatesObj,
 } from "@flixlix-cards/shared/types";
@@ -28,6 +29,7 @@ export const gridElement = (
       acPower: number;
       dcPower: number;
       display: RvDistributionDisplayConfig;
+      acDisplay: RvAcLoadDisplayConfig;
     };
   }
 ) => {
@@ -106,14 +108,15 @@ export const gridElement = (
             class="rv-shore-power-values"
             data-active=${rvPower.shoreInput > 0 ? "true" : "false"}
           >
-            ${rvPower.display.display_zero !== false || rvPower.acPower > 0
+            ${(rvPower.display.display_zero !== false &&
+              rvPower.acDisplay.display_zero !== false) ||
+            rvPower.acPower > 0
               ? html`<span
                   class="rv-shore-power-row rv-shore-ac-input ${rvPower.shoreInput > 0 &&
                   rvPower.acPower > 0
                     ? ""
                     : "rv-shore-power-row--inactive"}"
                 >
-                  <span class="rv-shore-direction-label">AC</span>
                   <ha-icon
                     class="small rv-shore-power-arrow rv-shore-power-arrow--ac"
                     .icon=${"mdi:arrow-right"}
@@ -123,7 +126,7 @@ export const gridElement = (
                     >${displayValue(main.hass, config, rvPower.acPower, {
                       unit: grid.unit,
                       unitWhiteSpace: grid.unit_white_space,
-                      decimals: rvPower.display.decimals ?? grid.decimals,
+                      decimals: rvPower.acDisplay.decimals ?? grid.decimals,
                     })}</span
                   >
                 </span>`
@@ -147,7 +150,6 @@ export const gridElement = (
                     .icon=${"mdi:arrow-right"}
                     aria-hidden="true"
                   ></ha-icon>
-                  <span class="rv-shore-direction-label">DC</span>
                 </span>`
               : nothing}
           </div>`

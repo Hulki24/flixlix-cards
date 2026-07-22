@@ -113,6 +113,11 @@ function renderRvFlowScenario({
   gridSecondary,
   baseDecimals,
   gridDecimals,
+  acMinimumPower,
+  acDecimals,
+  acDisplayZero,
+  homeDecimals,
+  homeDisplayZero,
 }: {
   shoreInput?: number;
   acOutput?: number;
@@ -130,6 +135,11 @@ function renderRvFlowScenario({
   gridSecondary?: number;
   baseDecimals?: number;
   gridDecimals?: number;
+  acMinimumPower?: number;
+  acDecimals?: number;
+  acDisplayZero?: boolean;
+  homeDecimals?: number;
+  homeDisplayZero?: boolean;
 }) {
   const resolvedShoreInput = shoreInput ?? Math.max(acOutput, 0);
   const boosterConfigured =
@@ -150,7 +160,13 @@ function renderRvFlowScenario({
       },
       solar: { entity: "sensor.classic_solar" },
       battery: { entity: "sensor.legacy_battery" },
-      home: { entity: "sensor.classic_home", name: "RV", override_state: true },
+      home: {
+        entity: "sensor.classic_home",
+        name: "RV",
+        override_state: true,
+        ...(homeDecimals === undefined ? {} : { decimals: homeDecimals }),
+        ...(homeDisplayZero === undefined ? {} : { display_zero: homeDisplayZero }),
+      },
     },
     rv: {
       shore: { input_power: "sensor.shore" },
@@ -180,6 +196,17 @@ function renderRvFlowScenario({
             loads: {
               ...(acPower === undefined ? {} : { ac_power: "sensor.ac_load" }),
               ...(dcPower === undefined ? {} : { dc_power: "sensor.dc_load" }),
+              ...(acMinimumPower === undefined &&
+              acDecimals === undefined &&
+              acDisplayZero === undefined
+                ? {}
+                : {
+                    ac_display: {
+                      ...(acMinimumPower === undefined ? {} : { minimum_power: acMinimumPower }),
+                      ...(acDecimals === undefined ? {} : { decimals: acDecimals }),
+                      ...(acDisplayZero === undefined ? {} : { display_zero: acDisplayZero }),
+                    },
+                  }),
             },
           }),
     },
@@ -413,11 +440,13 @@ describe("render", () => {
     expect(container.querySelector(".circle-container.grid .label")?.textContent).toBe(
       "Distribution"
     );
-    expect(inputRow?.textContent).toMatch(/AC[\s\S]*897/);
-    expect(outputRow?.textContent).toMatch(/43[\s\S]*DC/);
+    expect(inputRow?.textContent).toContain("897");
+    expect(outputRow?.textContent).toContain("43");
+    expect(inputRow?.textContent).not.toMatch(/\bAC\b/);
+    expect(outputRow?.textContent).not.toMatch(/\bDC\b/);
     expect(inputArrow.icon).toBe("mdi:arrow-right");
     expect(outputArrow.icon).toBe("mdi:arrow-right");
-    expect(inputRow?.children[1]).toBe(inputArrow);
+    expect(inputRow?.children[0]).toBe(inputArrow);
     expect(outputRow?.children[1]).toBe(outputArrow);
     expect(inputArrow.classList).toContain("rv-shore-power-arrow--ac");
     expect(outputArrow.classList).toContain("rv-shore-power-arrow--dc");
@@ -461,6 +490,158 @@ describe("render", () => {
     expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
       "33"
     );
+  });
+
+  test.each([8, 149])(
+    "default AC minimum suppresses %s W while the DC branch remains active",
+    (acPower) => {
+      const { container, data } = renderRvFlowScenario({
+        shoreInput: 220,
+        acPower,
+        acOutput: 100,
+        batteryNet: 90,
+      });
+
+      expect(data.rvData.loads.acPower).toBe(acPower);
+      expect(data.rvData.rvDcConsumption).toBe(10);
+      expect(
+        container
+          .querySelector(".rv-shore-ac-input .rv-shore-power-value")
+          ?.getAttribute("data-power-watts")
+      ).toBe("0");
+      expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
+      expect(
+        container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")
+      ).toBe("10");
+      expect(container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")).toBe(
+        "0"
+      );
+      expect(container.querySelector(".rv-home-ac-power")?.classList).toContain(
+        "rv-home-power--inactive"
+      );
+    }
+  );
+
+  test("AC minimum is inclusive at 150 W", () => {
+    const { container } = renderRvFlowScenario({ shoreInput: 220, acPower: 150 });
+
+    expect(
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
+    ).toBe("150");
+    expect(container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")).toBe(
+      "150"
+    );
+  });
+
+  test("explicit AC minimum 0 keeps an 8 W load visible", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 8,
+      acMinimumPower: 0,
+    });
+
+    expect(
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
+    ).toBe("8");
+    expect(container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")).toBe(
+      "8"
+    );
+  });
+
+  test("suppressed AC zero can be hidden without hiding an active DC branch", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 8,
+      acOutput: 100,
+      batteryNet: 90,
+      acDisplayZero: false,
+    });
+
+    expect(container.querySelector(".rv-shore-ac-input")).toBeNull();
+    expect(container.querySelector(".rv-home-ac-power")).toBeNull();
+    expect(container.querySelector("#home-icon")).not.toBeNull();
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")).not.toBeNull();
+  });
+
+  test("active AC keeps the RV bubble stable when DC display is hidden at zero", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 200,
+      acOutput: 0,
+      homeDisplayZero: false,
+    });
+
+    expect(container.querySelector(".circle-container.home")).not.toBeNull();
+    expect(container.querySelector(".rv-home-ac-power")?.textContent).toContain("200");
+    expect(container.querySelector("#home-icon")).not.toBeNull();
+    expect(container.querySelector(".rv-home-dc-power")).toBeNull();
+    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")).toBeNull();
+  });
+
+  test("RV AC and DC branches are straight, separated, and connected at fixed offsets", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 894,
+      acPower: 855,
+      acOutput: 100,
+      batteryNet: 50,
+      solarOutput: 20,
+    });
+    const shorePath = container.querySelector("#rv-shore-distribution-path")?.getAttribute("d");
+    const acPath = container.querySelector("#rv-distribution-to-rv-ac-path")?.getAttribute("d");
+    const dcPath = container.querySelector("#rv-dc-bus-to-rv-path")?.getAttribute("d");
+    const solarPath = container.querySelector("#rv-solar-dc-bus-path")?.getAttribute("d");
+
+    expect(shorePath).toMatch(/^M0,0 V\d+$/);
+    expect(shorePath).not.toMatch(/[CQ]/);
+    expect(acPath).toBe("M0,34 H100");
+    expect(dcPath).toBe("M50,66 H100");
+    expect(solarPath).toBe("M50,0 V66");
+    expect(acPath).not.toMatch(/[CQ]/);
+    expect(dcPath).not.toMatch(/[CQ]/);
+    expect(Number(acPath?.match(/M0,(\d+)/)?.[1])).toBeLessThan(
+      Number(dcPath?.match(/M50,(\d+)/)?.[1])
+    );
+    expect(
+      container.querySelector("#rv-solar-dc-bus-path.rv-distribution-to-rv-ac-path")
+    ).toBeNull();
+  });
+
+  test("RV bubble orders AC value, icon, and DC value without text labels", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 400,
+      acPower: 200,
+      acOutput: 100,
+      batteryNet: 50,
+    });
+    const homeCircle = container.querySelector("#home-circle");
+    const ordered = homeCircle?.querySelectorAll(
+      ".rv-home-ac-power, #home-icon, .rv-home-dc-power"
+    );
+
+    expect(ordered?.length).toBe(3);
+    expect(ordered?.[0].classList).toContain("rv-home-ac-power");
+    expect(ordered?.[1].id).toBe("home-icon");
+    expect(ordered?.[2].classList).toContain("rv-home-dc-power");
+    expect(homeCircle?.textContent).not.toMatch(/\bAC\b|\bDC\b|AC Load|DC Load/);
+    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).not.toBeNull();
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")).not.toBeNull();
+  });
+
+  test("RV AC and DC values honor their independent zero decimals", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 400,
+      acPower: 200.4,
+      acOutput: 100.4,
+      batteryNet: 50,
+      acDecimals: 0,
+      homeDecimals: 0,
+    });
+
+    expect(container.querySelector(".rv-home-ac-power")?.textContent).toMatch(/200\s*W/);
+    expect(container.querySelector(".rv-home-dc-power")?.textContent).toMatch(/50\s*W/);
+    expect(container.querySelector(".rv-home-ac-power")?.textContent).not.toContain(".");
+    expect(container.querySelector(".rv-home-dc-power")?.textContent).not.toContain(".");
   });
 
   test.each([
@@ -511,6 +692,7 @@ describe("render", () => {
       acOutput: 7.16,
       baseDecimals: 0,
       gridDecimals: 1,
+      acMinimumPower: 0,
     });
     const inputText =
       container.querySelector(".rv-shore-ac-input .rv-shore-power-value")?.textContent ?? "";
@@ -529,9 +711,7 @@ describe("render", () => {
 
     expect(cssText).toMatch(/--rv-ac-power-color:[^;]*#d32f2f/);
     expect(cssText).toMatch(/rv-shore-power-arrow--ac[\s\S]*var\(--rv-ac-power-color\)/);
-    expect(cssText).toMatch(
-      /rv-shore-ac-input \.rv-shore-power-value,[\s\S]*rv-shore-direction-label[\s\S]*var\(--rv-ac-power-color\)/
-    );
+    expect(cssText).toMatch(/rv-shore-ac-input \.rv-shore-power-value[\s\S]*rv-ac-power-color/);
     expect(cssText).toMatch(/rv-shore-total[\s\S]*var\(--rv-ac-power-color\)/);
     expect(cssText).toMatch(/rv-distribution-to-rv-ac-path[\s\S]*rv-ac-power-color/);
     expect(cssText).toMatch(/rv-shore-power-arrow--dc[\s\S]*energy-grid-consumption-color/);
@@ -2076,9 +2256,7 @@ describe("_computeRenderData", () => {
     expect(data.rvData.loads.acPower).toBe(15);
     expect(data.rvData.loads.acPowerConfigured).toBe(true);
     expect(container.querySelector("#rv-shore-total")).not.toBeNull();
-    expect(
-      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
-    ).toBe("15");
+    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
     expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-booster-to-dc-bus-flow")).not.toBeNull();

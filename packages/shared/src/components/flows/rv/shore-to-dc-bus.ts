@@ -7,6 +7,7 @@ import {
 import { html, nothing, svg } from "lit";
 import { classMap } from "lit/directives/class-map.js";
 import { type Flows } from "../index";
+import { RV_DC_FLOW_Y } from "./layout";
 
 const shoreToDcBusDot = (config: FlowCardPlusConfig, value: number, duration: number) => {
   if (!checkShouldShowDots(config) || value <= 0) return nothing;
@@ -53,7 +54,7 @@ export function flowShoreToDcBus(
       <path
         id="rv-shore-dc-bus-path"
         class="rv-shore-dc-bus-path"
-        d="M0,${battery.has ? 50 : solar.has ? 56 : 53} H50"
+        d="M0,${RV_DC_FLOW_Y} H50"
         vector-effect="non-scaling-stroke"
       ></path>
       ${shoreToDcBusDot(config, value, duration)}

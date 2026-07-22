@@ -2,6 +2,7 @@ import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shar
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
 import { html, nothing, svg } from "lit";
 import { type Flows } from "../index";
+import { RV_DC_FLOW_Y } from "./layout";
 
 export function flowBoosterToDcBus(
   config: FlowCardPlusConfig,
@@ -23,7 +24,7 @@ export function flowBoosterToDcBus(
       <path
         id="rv-booster-to-dc-bus-path"
         class="rv-booster-to-dc-bus-path"
-        d="M25,100 Q45,100 50,50"
+        d="M25,100 Q45,100 50,${RV_DC_FLOW_Y}"
         vector-effect="non-scaling-stroke"
       ></path>
       ${checkShouldShowDots(config)

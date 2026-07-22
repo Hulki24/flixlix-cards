@@ -202,8 +202,9 @@ export interface RvBubbleDisplayConfig extends ActionConfigSet {
   secondary_info?: SecondaryInfoType;
 }
 
-/** @deprecated Retained as a compatibility alias for rv.loads.ac_display. */
-export type RvAcLoadDisplayConfig = RvBubbleDisplayConfig;
+export interface RvAcLoadDisplayConfig extends RvBubbleDisplayConfig {
+  minimum_power?: number;
+}
 
 export interface RvDistributionDisplayConfig {
   name?: string;

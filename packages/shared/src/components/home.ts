@@ -22,6 +22,13 @@ interface Home {
   homeNonFossilCircumference: number;
   homeGridCircumference: number;
   individual: IndividualObject[];
+  rvPower?: {
+    acPower: number;
+    acPowerToDisplay: string;
+    dcPower: number;
+    showAcPower: boolean;
+    showDcPower: boolean;
+  };
 }
 
 export const homeElement = (
@@ -38,6 +45,7 @@ export const homeElement = (
     homeNonFossilCircumference,
     homeGridCircumference,
     individual,
+    rvPower,
   }: Home
 ) => {
   const showHomeLabel = individual.filter((i) => i.has).length <= 1;
@@ -53,7 +61,9 @@ export const homeElement = (
   return html`
     <div class="circle-container home">
       <div
-        class="circle ${disableEntityClick ? "pointer-events-none" : ""}"
+        class="circle ${rvPower ? "rv-home-circle" : ""} ${disableEntityClick
+          ? "pointer-events-none"
+          : ""}"
         id="home-circle"
         @click=${(e: MouseEvent) => {
           main.onEntityClick(e, entities.home, entities.home?.entity);
@@ -77,66 +87,88 @@ export const homeElement = (
         }}
       >
         <ha-ripple .disabled=${disableEntityClick}></ha-ripple>
-        ${generalSecondarySpan(main.hass, main, config, templatesObj, home, "home")}
+        ${rvPower
+          ? rvPower.showAcPower
+            ? html`<span
+                class="rv-home-power rv-home-ac-power ${rvPower.acPower > 0
+                  ? ""
+                  : "rv-home-power--inactive"}"
+                data-power-watts=${String(rvPower.acPower)}
+                >${rvPower.acPowerToDisplay}</span
+              >`
+            : nothing
+          : generalSecondarySpan(main.hass, main, config, templatesObj, home, "home")}
         ${home.icon !== " " ? html`<ha-icon id="home-icon" .icon=${home.icon}></ha-icon>` : nothing}
-        ${homeUsageToDisplay}
-        <svg class="home-circle-sections">
-          ${homeSolarCircumference !== undefined
-            ? svg`<circle
-                  class="solar"
-                  cx="40"
-                  cy="40"
-                  r="38"
-                  stroke-dasharray="${homeSolarCircumference} ${CIRCLE_CIRCUMFERENCE -
+        ${rvPower
+          ? rvPower.showDcPower
+            ? html`<span
+                class="rv-home-power rv-home-dc-power ${rvPower.dcPower > 0
+                  ? ""
+                  : "rv-home-power--inactive"}"
+                data-power-watts=${String(rvPower.dcPower)}
+                >${homeUsageToDisplay}</span
+              >`
+            : nothing
+          : homeUsageToDisplay}
+        ${!rvPower
+          ? html`<svg class="home-circle-sections">
+              ${homeSolarCircumference !== undefined
+                ? svg`<circle
+                      class="solar"
+                      cx="40"
+                      cy="40"
+                      r="38"
+                      stroke-dasharray="${homeSolarCircumference} ${CIRCLE_CIRCUMFERENCE -
                   homeSolarCircumference}"
-                  shape-rendering="geometricPrecision"
-                  stroke-dashoffset="-${CIRCLE_CIRCUMFERENCE - homeSolarCircumference}"
-                />`
-            : nothing}
-          ${homeBatteryCircumference
-            ? svg`<circle
-                  class="battery"
-                  cx="40"
-                  cy="40"
-                  r="38"
-                  stroke-dasharray="${homeBatteryCircumference} ${CIRCLE_CIRCUMFERENCE -
+                      shape-rendering="geometricPrecision"
+                      stroke-dashoffset="-${CIRCLE_CIRCUMFERENCE - homeSolarCircumference}"
+                    />`
+                : nothing}
+              ${homeBatteryCircumference
+                ? svg`<circle
+                      class="battery"
+                      cx="40"
+                      cy="40"
+                      r="38"
+                      stroke-dasharray="${homeBatteryCircumference} ${CIRCLE_CIRCUMFERENCE -
                   homeBatteryCircumference}"
-                  stroke-dashoffset="-${CIRCLE_CIRCUMFERENCE -
+                      stroke-dashoffset="-${CIRCLE_CIRCUMFERENCE -
                   homeBatteryCircumference -
                   (homeSolarCircumference || 0)}"
-                  shape-rendering="geometricPrecision"
-                />`
-            : nothing}
-          ${homeNonFossilCircumference !== undefined
-            ? svg`<circle
-                  class="low-carbon"
-                  cx="40"
-                  cy="40"
-                  r="38"
-                  stroke-dasharray="${homeNonFossilCircumference} ${CIRCLE_CIRCUMFERENCE -
+                      shape-rendering="geometricPrecision"
+                    />`
+                : nothing}
+              ${homeNonFossilCircumference !== undefined
+                ? svg`<circle
+                      class="low-carbon"
+                      cx="40"
+                      cy="40"
+                      r="38"
+                      stroke-dasharray="${homeNonFossilCircumference} ${CIRCLE_CIRCUMFERENCE -
                   homeNonFossilCircumference}"
-                  stroke-dashoffset="-${CIRCLE_CIRCUMFERENCE -
+                      stroke-dashoffset="-${CIRCLE_CIRCUMFERENCE -
                   homeNonFossilCircumference -
                   (homeBatteryCircumference || 0) -
                   (homeSolarCircumference || 0)}"
-                  shape-rendering="geometricPrecision"
-                />`
-            : nothing}
-          <circle
-            class="grid"
-            cx="40"
-            cy="40"
-            r="38"
-            stroke-dasharray="${homeGridCircumference ??
-            CIRCLE_CIRCUMFERENCE -
-              homeSolarCircumference! -
-              (homeBatteryCircumference || 0)} ${homeGridCircumference !== undefined
-              ? CIRCLE_CIRCUMFERENCE - homeGridCircumference
-              : homeSolarCircumference! + (homeBatteryCircumference || 0)}"
-            stroke-dashoffset="0"
-            shape-rendering="geometricPrecision"
-          />
-        </svg>
+                      shape-rendering="geometricPrecision"
+                    />`
+                : nothing}
+              <circle
+                class="grid"
+                cx="40"
+                cy="40"
+                r="38"
+                stroke-dasharray="${homeGridCircumference ??
+                CIRCLE_CIRCUMFERENCE -
+                  homeSolarCircumference! -
+                  (homeBatteryCircumference || 0)} ${homeGridCircumference !== undefined
+                  ? CIRCLE_CIRCUMFERENCE - homeGridCircumference
+                  : homeSolarCircumference! + (homeBatteryCircumference || 0)}"
+                stroke-dashoffset="0"
+                shape-rendering="geometricPrecision"
+              />
+            </svg>`
+          : nothing}
       </div>
       ${!showHomeLabel
         ? html`<span class="label"></span>`

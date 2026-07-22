@@ -11,6 +11,7 @@ export const rvStyles = css`
     align-items: center;
     justify-content: center;
     pointer-events: none;
+    transform: translateY(23px);
   }
 
   .rv-dc-bus-node {

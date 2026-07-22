@@ -16,6 +16,8 @@
     "rv_ac_charger": "AC-Ladegerät",
     "rv_ac_display_options": "230-V-Anzeigeoptionen",
     "rv_ac_input_color": "AC-Eingang",
+    "rv_ac_minimum_power": "Mindestleistung 230-V-Verbraucher",
+    "rv_ac_minimum_power_help": "Mindestleistung für 230-V-Verbraucher. Kleinere Messwerte werden nicht als aktiver AC-Verbrauch dargestellt.",
     "rv_ac_power": "AC-Leistung",
     "rv_battery_input_color": "Batterieeingang",
     "rv_battery_output_color": "Batterieausgang",
