@@ -80,7 +80,7 @@ describe("power flow ui editor", () => {
     );
 
     expect(fields).toEqual({
-      shore: ["input_power", "display"],
+      shore: ["input_power", "total_display", "distribution_display"],
       ac_charger: [
         "state",
         "input_power",
@@ -112,7 +112,7 @@ describe("power flow ui editor", () => {
         "color",
         "secondary_info",
       ],
-      loads: ["total_power", "ac_power", "dc_power", "ac_display", "display"],
+      loads: ["total_power", "ac_power", "dc_power", "display"],
     });
   });
 
@@ -193,7 +193,7 @@ describe("power flow ui editor", () => {
     expect(config.entities.grid).toEqual({ entity: "sensor.grid" });
   });
 
-  test("RV display options reuse existing entity display configuration", () => {
+  test("RV shore displays use structured paths without migrating existing grid YAML", () => {
     const current = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
@@ -211,19 +211,25 @@ describe("power flow ui editor", () => {
     } as any;
 
     const editorData = buildRvEditorData(current);
-    expect((editorData.shore as any).display).toMatchObject({ name: "Old shore" });
+    expect((editorData.shore as any).total_display).toBeUndefined();
 
     const updated = applyRvEditorValue(current, {
       ...editorData,
       shore: {
         input_power: "sensor.shore",
-        display: {
+        total_display: {
           name: "Landstrom",
           icon: "mdi:power-plug",
           decimals: 0,
           unit_of_measurement: "W",
           display_zero: false,
-          color: { production: [120, 80, 180], consumption: [40, 120, 200] },
+          color: [180, 20, 30],
+        },
+        distribution_display: {
+          name: "Verteilung",
+          icon: "mdi:transit-connection-variant",
+          decimals: 1,
+          display_zero: true,
         },
       },
       solar_charger: {
@@ -240,16 +246,15 @@ describe("power flow ui editor", () => {
       },
     });
 
-    expect(updated.rv?.shore).toEqual({ input_power: "sensor.shore" });
+    expect(updated.rv?.shore).toMatchObject({
+      input_power: "sensor.shore",
+      total_display: { name: "Landstrom", decimals: 0, display_zero: false },
+      distribution_display: { name: "Verteilung", decimals: 1, display_zero: true },
+    });
     expect(updated.rv?.loads).toEqual({ dc_power: "sensor.rv_dc" });
     expect((updated.rv?.shore as any)?.display).toBeUndefined();
     expect((updated.rv?.loads as any)?.display).toBeUndefined();
-    expect(updated.entities.grid).toMatchObject({
-      entity: "sensor.shore",
-      name: "Landstrom",
-      decimals: 0,
-      display_zero: false,
-    });
+    expect(updated.entities.grid).toEqual({ entity: "sensor.shore", name: "Old shore" });
     expect(updated.entities.solar).toMatchObject({ entity: "sensor.solar", decimals: 1 });
     expect(updated.entities.battery).toMatchObject({
       entity: "sensor.battery",
@@ -266,15 +271,27 @@ describe("power flow ui editor", () => {
         (field: any) => field.name
       );
 
-    expect(displayNames("shore")).toEqual([
+    const shoreTotalDisplay = groups.shore.schema.find(
+      (field) => field.name === "total_display"
+    ) as any;
+    expect(shoreTotalDisplay.schema.map((field: any) => field.name)).toEqual([
       "name",
       "icon",
       "decimals",
       "unit_of_measurement",
-      "color_value",
+      "color",
+      "display_zero",
+      "secondary_info",
+    ]);
+    const distributionDisplay = groups.shore.schema.find(
+      (field) => field.name === "distribution_display"
+    ) as any;
+    expect(distributionDisplay.schema.map((field: any) => field.name)).toEqual([
+      "name",
+      "icon",
+      "decimals",
       "display_zero",
       "color",
-      "secondary_info",
     ]);
     expect(displayNames("solar_charger")).toEqual([
       "name",
@@ -289,32 +306,26 @@ describe("power flow ui editor", () => {
     expect(displayNames("cabin_battery")).toContain("state_of_charge_decimals");
     expect(displayNames("cabin_battery")).toContain("show_state_of_charge");
     expect(displayNames("loads")).toContain("secondary_info");
-    const acDisplay = groups.loads.schema.find((field) => field.name === "ac_display") as any;
-    expect(acDisplay.schema.map((field: any) => field.name)).toEqual([
-      "name",
-      "icon",
-      "decimals",
-      "unit_of_measurement",
-      "color",
-      "display_zero",
-      "secondary_info",
-    ]);
+    expect(groups.loads.schema.map((field) => field.name)).not.toContain("ac_display");
     expect(groups.booster.schema.map((field) => field.name)).not.toContain("icon");
   });
 
-  test("AC load display options stay under rv.loads and retain explicit zero decimals", () => {
+  test("shore total display options stay under rv.shore and retain explicit zero decimals", () => {
     const current = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
       entities: { grid: { entity: "sensor.shore" }, home: { entity: "sensor.home" } },
-      rv: { loads: { ac_power: "sensor.ac_load", dc_power: "sensor.dc_load" } },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        loads: { ac_power: "sensor.ac_load", dc_power: "sensor.dc_load" },
+      },
     } as any;
     const value = buildRvEditorData(current);
-    value.loads = {
-      ...(value.loads as Record<string, unknown>),
-      ac_display: {
-        name: "230 V",
-        icon: "mdi:power-socket-eu",
+    value.shore = {
+      ...(value.shore as Record<string, unknown>),
+      total_display: {
+        name: "Landstrom",
+        icon: "mdi:power-plug",
         color: [211, 47, 47],
         decimals: 0,
         unit_of_measurement: "W",
@@ -329,8 +340,8 @@ describe("power flow ui editor", () => {
 
     const updated = applyRvEditorValue(current, value);
 
-    expect(updated.rv?.loads?.ac_display).toMatchObject({
-      name: "230 V",
+    expect(updated.rv?.shore?.total_display).toMatchObject({
+      name: "Landstrom",
       decimals: 0,
       display_zero: false,
     });

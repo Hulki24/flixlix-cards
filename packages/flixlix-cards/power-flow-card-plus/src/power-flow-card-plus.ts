@@ -8,9 +8,9 @@ import { individualRightBottomElement } from "@flixlix-cards/shared/components/i
 import { individualRightTopElement } from "@flixlix-cards/shared/components/individual-right-top-element";
 import { dashboardLinkElement } from "@flixlix-cards/shared/components/misc/dashboard-link";
 import { nonFossilElement } from "@flixlix-cards/shared/components/non-fossil";
-import { acLoadElement } from "@flixlix-cards/shared/components/rv/ac-load";
 import { boosterNodeElement } from "@flixlix-cards/shared/components/rv/booster-node";
 import { dcBusElement } from "@flixlix-cards/shared/components/rv/dc-bus";
+import { shoreTotalElement } from "@flixlix-cards/shared/components/rv/shore-total";
 import { starterBatteryElement } from "@flixlix-cards/shared/components/rv/starter-battery";
 import { solarElement } from "@flixlix-cards/shared/components/solar";
 import { spacer } from "@flixlix-cards/shared/components/spacer";
@@ -57,6 +57,7 @@ import {
   type HomeSources,
   type NewDur,
   type PowerFlowCardPlusConfig,
+  type RvBubbleDisplayConfig,
   type RvDcBusRenderData,
   type RvRuntimeData,
   type TemplatesObj,
@@ -124,7 +125,8 @@ export class PowerFlowCardPlus extends LitElement {
   @query("#solar-grid-flow") solarToGridFlow?: SVGSVGElement;
   @query("#solar-home-flow") solarToHomeFlow?: SVGSVGElement;
   @query("#rv-shore-dc-bus-flow") shoreToDcBusFlow?: SVGSVGElement;
-  @query("#rv-shore-ac-load-flow") shoreToAcLoadFlow?: SVGSVGElement;
+  @query("#rv-shore-distribution-flow") shoreToDistributionFlow?: SVGSVGElement;
+  @query("#rv-distribution-to-rv-ac-flow") distributionToRvAcFlow?: SVGSVGElement;
   @query("#rv-solar-dc-bus-flow") solarToDcBusFlow?: SVGSVGElement;
   @query("#rv-dc-bus-to-cabin-battery-flow") dcBusToCabinBatteryFlow?: SVGSVGElement;
   @query("#rv-cabin-battery-to-dc-bus-flow") cabinBatteryToDcBusFlow?: SVGSVGElement;
@@ -446,13 +448,52 @@ export class PowerFlowCardPlus extends LitElement {
         unitWhiteSpace: field?.unit_white_space,
       });
     };
-    const acLoadDisplay = this._config.rv?.loads?.ac_display;
-    const showAcLoad =
+    const configuredShoreTotalDisplay = this._config.rv?.shore?.total_display;
+    const legacyAcDisplay = this._config.rv?.loads?.ac_display;
+    const shoreTotalDisplay: RvBubbleDisplayConfig = {
+      ...legacyAcDisplay,
+      ...configuredShoreTotalDisplay,
+      name:
+        configuredShoreTotalDisplay?.name ??
+        entities.grid?.name ??
+        legacyAcDisplay?.name ??
+        localize("editor.rv_shore"),
+      icon:
+        configuredShoreTotalDisplay?.icon ??
+        entities.grid?.icon ??
+        legacyAcDisplay?.icon ??
+        "mdi:power-plug",
+      decimals:
+        configuredShoreTotalDisplay?.decimals ??
+        entities.grid?.decimals ??
+        legacyAcDisplay?.decimals,
+      unit_of_measurement:
+        configuredShoreTotalDisplay?.unit_of_measurement ??
+        entities.grid?.unit_of_measurement ??
+        legacyAcDisplay?.unit_of_measurement,
+      unit_white_space:
+        configuredShoreTotalDisplay?.unit_white_space ??
+        entities.grid?.unit_white_space ??
+        legacyAcDisplay?.unit_white_space,
+      display_zero:
+        configuredShoreTotalDisplay?.display_zero ??
+        entities.grid?.display_zero ??
+        legacyAcDisplay?.display_zero,
+      secondary_info: configuredShoreTotalDisplay?.secondary_info ?? entities.grid?.secondary_info,
+    };
+    const showShoreTotal =
       rvMode &&
-      rvData.loads.acPowerConfigured &&
-      (acLoadDisplay?.display_zero !== false || rvData.loads.acPower > 0);
-    const acLoadActive =
-      rvData.loads.acPowerAvailable && rvData.shore.inputPower > 0 && rvData.loads.acPower > 0;
+      rvData.shore.has &&
+      (shoreTotalDisplay.display_zero !== false || rvData.shore.inputPower > 0);
+    const distributionDisplay = {
+      name:
+        this._config.rv?.shore?.distribution_display?.name ?? localize("editor.rv_distribution"),
+      icon: this._config.rv?.shore?.distribution_display?.icon ?? "mdi:transit-connection-variant",
+      color: this._config.rv?.shore?.distribution_display?.color,
+      decimals: this._config.rv?.shore?.distribution_display?.decimals ?? entities.grid?.decimals,
+      display_zero:
+        this._config.rv?.shore?.distribution_display?.display_zero ?? entities.grid?.display_zero,
+    };
 
     return html`
       <ha-card
@@ -467,13 +508,13 @@ export class PowerFlowCardPlus extends LitElement {
           id="power-flow-card-plus"
           style=${this._config.style_card_content ? this._config.style_card_content : ""}
         >
-          ${showAcLoad ||
+          ${showShoreTotal ||
           solar.has ||
           individualObjs?.some((individual) => individual?.has) ||
           nonFossil.hasPercentage
             ? html`<div class="row">
-                ${showAcLoad
-                  ? acLoadElement(this, this._config, rvData.loads, acLoadDisplay, acLoadActive)
+                ${showShoreTotal
+                  ? shoreTotalElement(this, this._config, rvData.shore, shoreTotalDisplay)
                   : nonFossilElement(this, this._config, {
                       entities,
                       grid,
@@ -518,8 +559,10 @@ export class PowerFlowCardPlus extends LitElement {
                   templatesObj,
                   rvPower: rvMode
                     ? {
-                        inputPower: rvData.shore.inputPower,
-                        outputPower: rvData.acCharger.outputPower,
+                        shoreInput: rvData.shore.inputPower,
+                        acPower: rvData.loads.acPower,
+                        dcPower: rvData.acCharger.outputPower,
+                        display: distributionDisplay,
                       }
                     : undefined,
                 })
@@ -684,11 +727,14 @@ export class PowerFlowCardPlus extends LitElement {
       }`,
     };
     const initialNumericState = null as null | number;
+    const distributionDisplayZero =
+      this._config.rv?.shore?.distribution_display?.display_zero ?? entities.grid?.display_zero;
+    const distributionHasPower =
+      rvData.shore.inputPower > 0 || rvData.loads.acPower > 0 || rvData.acCharger.outputPower > 0;
     const grid: GridObject = {
       entity: entities.grid?.entity,
       has: rvMode
-        ? rvData.shore.has &&
-          (entities.grid?.display_zero !== false || rvData.shore.inputPower !== 0)
+        ? rvData.shore.has && (distributionDisplayZero !== false || distributionHasPower)
         : entities?.grid?.entity !== undefined,
       hasReturnToGrid:
         typeof entities.grid?.entity === "string" || !!entities.grid?.entity?.production,
@@ -1093,7 +1139,8 @@ export class PowerFlowCardPlus extends LitElement {
         (battery.state.toHome ?? 0) +
         (grid.state.toBattery ?? 0) +
         (battery.state.toGrid ?? 0);
-    const rvAcTotalLines = totalLines + Math.max(rvData.loads.acPower, 0);
+    const rvAcTotalLines =
+      totalLines + Math.max(rvData.loads.acPower, 0) + Math.max(rvData.shore.inputPower, 0);
     if (battery.state_of_charge.state === null) {
       battery.icon = "mdi:battery";
     } else if (battery.state_of_charge.state <= 72 && battery.state_of_charge.state > 44) {
@@ -1130,7 +1177,12 @@ export class PowerFlowCardPlus extends LitElement {
       ...(rvMode
         ? {
             shoreToDcBus: computeFlowRate(this._config, rvData.acCharger.outputPower, totalLines),
-            shoreToAcLoad: computeFlowRate(this._config, rvData.loads.acPower, rvAcTotalLines),
+            shoreToDistribution: computeFlowRate(
+              this._config,
+              rvData.shore.inputPower,
+              rvAcTotalLines
+            ),
+            distributionToRvAc: computeFlowRate(this._config, rvData.loads.acPower, rvAcTotalLines),
             solarToDcBus: computeFlowRate(
               this._config,
               rvData.solarCharger.outputPower,
@@ -1161,7 +1213,8 @@ export class PowerFlowCardPlus extends LitElement {
         | "solarToGrid"
         | "solarToHome"
         | "shoreToDcBus"
-        | "shoreToAcLoad"
+        | "shoreToDistribution"
+        | "distributionToRvAc"
         | "solarToDcBus"
         | "dcBusToCabinBattery"
         | "cabinBatteryToDcBus"
@@ -1170,7 +1223,8 @@ export class PowerFlowCardPlus extends LitElement {
         | "boosterToDcBus";
       const flowNames: AnimatedFlowName[] = rvMode
         ? [
-            "shoreToAcLoad",
+            "shoreToDistribution",
+            "distributionToRvAc",
             "shoreToDcBus",
             "solarToDcBus",
             "dcBusToCabinBattery",
@@ -1287,7 +1341,9 @@ export class PowerFlowCardPlus extends LitElement {
       } as any
     );
     const configuredAcColor =
-      this._config.rv?.loads?.ac_display?.color ?? entities.grid?.color?.production;
+      this._config.rv?.shore?.total_display?.color ??
+      this._config.rv?.loads?.ac_display?.color ??
+      entities.grid?.color?.production;
     if (rvMode && configuredAcColor) {
       this.style.setProperty(
         "--rv-configured-ac-power-color",

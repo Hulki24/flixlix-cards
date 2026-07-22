@@ -85,23 +85,12 @@ export function sanitizeRvEditorValue(value: unknown): PowerFlowCardPlusConfig["
 }
 
 const RV_DISPLAY_TARGETS = {
-  shore: "grid",
   solar_charger: "solar",
   cabin_battery: "battery",
   loads: "home",
 } as const;
 
 const RV_DISPLAY_KEYS = {
-  shore: [
-    "name",
-    "icon",
-    "decimals",
-    "unit_of_measurement",
-    "color",
-    "color_value",
-    "display_zero",
-    "secondary_info",
-  ],
   solar_charger: [
     "name",
     "icon",

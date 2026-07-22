@@ -1,11 +1,14 @@
+import { convertColorListToHex } from "@flixlix-cards/shared/style";
 import {
   type CardMainContext,
   type ConfigEntities,
   type FlowCardPlusConfig,
+  type RvDistributionDisplayConfig,
   type TemplatesObj,
 } from "@flixlix-cards/shared/types";
 import { displayValue } from "@flixlix-cards/shared/utils/display-value";
 import { html, nothing } from "lit";
+import { styleMap } from "lit/directives/style-map.js";
 import { generalSecondarySpan } from "./spans/general-secondary-span";
 
 export const gridElement = (
@@ -20,15 +23,24 @@ export const gridElement = (
     entities: ConfigEntities;
     grid: any;
     templatesObj: TemplatesObj;
-    rvPower?: { inputPower: number; outputPower: number };
+    rvPower?: {
+      shoreInput: number;
+      acPower: number;
+      dcPower: number;
+      display: RvDistributionDisplayConfig;
+    };
   }
 ) => {
   const disableEntityClick = config.clickable_entities === false;
+  const distributionColor = Array.isArray(rvPower?.display.color)
+    ? convertColorListToHex(rvPower.display.color)
+    : rvPower?.display.color;
   return html`<div class="circle-container grid">
     <div
-      class="circle ${rvPower ? "rv-shore-circle" : ""} ${rvPower && rvPower.inputPower <= 0
+      class="circle ${rvPower ? "rv-shore-circle" : ""} ${rvPower && rvPower.shoreInput <= 0
         ? "rv-shore-circle--inactive"
         : ""} ${disableEntityClick ? "pointer-events-none" : ""}"
+      style=${styleMap(distributionColor ? { "--rv-distribution-color": distributionColor } : {})}
       @click=${(e: MouseEvent) => {
         const outageTarget =
           grid.powerOutage?.entityGenerator ?? entities.grid?.power_outage?.entity;
@@ -83,50 +95,61 @@ export const gridElement = (
       }}
     >
       <ha-ripple .disabled=${disableEntityClick}></ha-ripple>
-      ${generalSecondarySpan(main.hass, main, config, templatesObj, grid, "grid")}
-      ${grid.icon !== " " ? html` <ha-icon id="grid-icon" .icon=${grid.icon}></ha-icon>` : nothing}
+      ${!rvPower
+        ? generalSecondarySpan(main.hass, main, config, templatesObj, grid, "grid")
+        : nothing}
+      ${(rvPower?.display.icon ?? grid.icon) !== " "
+        ? html` <ha-icon id="grid-icon" .icon=${rvPower?.display.icon ?? grid.icon}></ha-icon>`
+        : nothing}
       ${rvPower
         ? html`<div
             class="rv-shore-power-values"
-            data-active=${rvPower.inputPower > 0 ? "true" : "false"}
+            data-active=${rvPower.shoreInput > 0 ? "true" : "false"}
           >
-            <span
-              class="rv-shore-power-row rv-shore-ac-input ${rvPower.inputPower > 0
-                ? ""
-                : "rv-shore-power-row--inactive"}"
-            >
-              <ha-icon
-                class="small rv-shore-power-arrow rv-shore-power-arrow--ac"
-                .icon=${"mdi:arrow-right"}
-                aria-hidden="true"
-              ></ha-icon>
-              <span class="rv-shore-power-value" data-power-watts=${rvPower.inputPower}
-                >${displayValue(main.hass, config, rvPower.inputPower, {
-                  unit: grid.unit,
-                  unitWhiteSpace: grid.unit_white_space,
-                  decimals: grid.decimals,
-                })}</span
-              >
-            </span>
-            <span
-              class="rv-shore-power-row rv-shore-dc-output ${rvPower.inputPower > 0 &&
-              rvPower.outputPower > 0
-                ? ""
-                : "rv-shore-power-row--inactive"}"
-            >
-              <span class="rv-shore-power-value" data-power-watts=${rvPower.outputPower}
-                >${displayValue(main.hass, config, rvPower.outputPower, {
-                  unit: grid.unit,
-                  unitWhiteSpace: grid.unit_white_space,
-                  decimals: grid.decimals,
-                })}</span
-              >
-              <ha-icon
-                class="small rv-shore-power-arrow rv-shore-power-arrow--dc"
-                .icon=${"mdi:arrow-right"}
-                aria-hidden="true"
-              ></ha-icon>
-            </span>
+            ${rvPower.display.display_zero !== false || rvPower.acPower > 0
+              ? html`<span
+                  class="rv-shore-power-row rv-shore-ac-input ${rvPower.shoreInput > 0 &&
+                  rvPower.acPower > 0
+                    ? ""
+                    : "rv-shore-power-row--inactive"}"
+                >
+                  <span class="rv-shore-direction-label">AC</span>
+                  <ha-icon
+                    class="small rv-shore-power-arrow rv-shore-power-arrow--ac"
+                    .icon=${"mdi:arrow-right"}
+                    aria-hidden="true"
+                  ></ha-icon>
+                  <span class="rv-shore-power-value" data-power-watts=${rvPower.acPower}
+                    >${displayValue(main.hass, config, rvPower.acPower, {
+                      unit: grid.unit,
+                      unitWhiteSpace: grid.unit_white_space,
+                      decimals: rvPower.display.decimals ?? grid.decimals,
+                    })}</span
+                  >
+                </span>`
+              : nothing}
+            ${rvPower.display.display_zero !== false || rvPower.dcPower > 0
+              ? html`<span
+                  class="rv-shore-power-row rv-shore-dc-output ${rvPower.shoreInput > 0 &&
+                  rvPower.dcPower > 0
+                    ? ""
+                    : "rv-shore-power-row--inactive"}"
+                >
+                  <span class="rv-shore-power-value" data-power-watts=${rvPower.dcPower}
+                    >${displayValue(main.hass, config, rvPower.dcPower, {
+                      unit: grid.unit,
+                      unitWhiteSpace: grid.unit_white_space,
+                      decimals: rvPower.display.decimals ?? grid.decimals,
+                    })}</span
+                  >
+                  <ha-icon
+                    class="small rv-shore-power-arrow rv-shore-power-arrow--dc"
+                    .icon=${"mdi:arrow-right"}
+                    aria-hidden="true"
+                  ></ha-icon>
+                  <span class="rv-shore-direction-label">DC</span>
+                </span>`
+              : nothing}
           </div>`
         : nothing}
       ${(entities.grid?.display_state === "two_way" ||
@@ -246,6 +269,6 @@ export const gridElement = (
         ? html`<span class="grid power-outage">${grid.powerOutage.name}</span>`
         : nothing}
     </div>
-    <span class="label">${grid.name}</span>
+    <span class="label">${rvPower?.display.name ?? grid.name}</span>
   </div>`;
 };

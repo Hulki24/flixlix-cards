@@ -391,10 +391,12 @@ describe("render", () => {
     expect(container.querySelector("#solar-home-flow")).toBeNull();
   });
 
-  test("RV shore bubble uses compact arrows and zero component decimals", () => {
+  test("RV splits shore total from AC and DC distribution", () => {
     const { container } = renderRvFlowScenario({
-      shoreInput: 457.4,
-      acOutput: 426.3,
+      shoreInput: 952,
+      acPower: 897,
+      acOutput: 43,
+      gridSecondary: 0.9,
       baseDecimals: 2,
       gridDecimals: 0,
     });
@@ -403,23 +405,39 @@ describe("render", () => {
     const inputArrow = inputRow?.querySelector("ha-icon") as any;
     const outputArrow = outputRow?.querySelector("ha-icon") as any;
 
-    expect(inputRow?.querySelector(".rv-shore-power-value")?.textContent).toContain("457");
-    expect(outputRow?.querySelector(".rv-shore-power-value")?.textContent).toContain("426");
+    expect(container.querySelector("#rv-shore-total")?.textContent).toContain("952");
+    expect(container.querySelector("#rv-shore-total .secondary-info")?.textContent).toContain(
+      "0.9"
+    );
+    expect(container.querySelector(".circle-container.grid .secondary-info")).toBeNull();
+    expect(container.querySelector(".circle-container.grid .label")?.textContent).toBe(
+      "Distribution"
+    );
+    expect(inputRow?.textContent).toMatch(/AC[\s\S]*897/);
+    expect(outputRow?.textContent).toMatch(/43[\s\S]*DC/);
     expect(inputArrow.icon).toBe("mdi:arrow-right");
     expect(outputArrow.icon).toBe("mdi:arrow-right");
-    expect(inputRow?.firstElementChild).toBe(inputArrow);
-    expect(outputRow?.lastElementChild).toBe(outputArrow);
+    expect(inputRow?.children[1]).toBe(inputArrow);
+    expect(outputRow?.children[1]).toBe(outputArrow);
     expect(inputArrow.classList).toContain("rv-shore-power-arrow--ac");
     expect(outputArrow.classList).toContain("rv-shore-power-arrow--dc");
     expect(container.querySelector(".rv-shore-power-values")?.textContent).not.toContain("→");
     expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
-      "426.3"
+      "43"
     );
+    expect(
+      container.querySelector("#rv-shore-distribution-flow")?.getAttribute("data-power-watts")
+    ).toBe("952");
+    expect(
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
+    ).toBe("897");
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")).not.toBeNull();
   });
 
   test("RV shore arrow values honor one component decimal over the global fallback", () => {
     const { container } = renderRvFlowScenario({
       shoreInput: 17.14,
+      acPower: 10.14,
       acOutput: 7.16,
       baseDecimals: 0,
       gridDecimals: 1,
@@ -429,7 +447,10 @@ describe("render", () => {
     const outputText =
       container.querySelector(".rv-shore-dc-output .rv-shore-power-value")?.textContent ?? "";
 
-    expect(inputText).toMatch(/17[,.]1\s*W/);
+    expect(container.querySelector("#rv-shore-total .rv-shore-total-value")?.textContent).toMatch(
+      /17[,.]1\s*W/
+    );
+    expect(inputText).toMatch(/10[,.]1\s*W/);
     expect(outputText).toMatch(/7[,.]2\s*W/);
   });
 
@@ -439,8 +460,10 @@ describe("render", () => {
     expect(cssText).toMatch(/--rv-ac-power-color:[^;]*#d32f2f/);
     expect(cssText).toMatch(/rv-shore-power-arrow--ac[\s\S]*var\(--rv-ac-power-color\)/);
     expect(cssText).toMatch(
-      /rv-shore-ac-input \.rv-shore-power-value,[\s\S]*secondary-info\.grid[\s\S]*var\(--rv-ac-power-color\)/
+      /rv-shore-ac-input \.rv-shore-power-value,[\s\S]*rv-shore-direction-label[\s\S]*var\(--rv-ac-power-color\)/
     );
+    expect(cssText).toMatch(/rv-shore-total[\s\S]*var\(--rv-ac-power-color\)/);
+    expect(cssText).toMatch(/rv-distribution-to-rv-ac-path[\s\S]*rv-ac-power-color/);
     expect(cssText).toMatch(/rv-shore-power-arrow--dc[\s\S]*energy-grid-consumption-color/);
     expect(cssText).toMatch(
       /rv-shore-dc-output \.rv-shore-power-value[\s\S]*energy-grid-consumption-color/
@@ -448,7 +471,7 @@ describe("render", () => {
     expect(cssText).toMatch(/rv-shore-dc-bus-path[\s\S]*energy-grid-consumption-color/);
   });
 
-  test("RV renders explicit AC loads separately without changing the DC residual", () => {
+  test("RV renders AC loads from the distribution without changing the DC residual", () => {
     const { container, data } = renderRvFlowScenario({
       shoreInput: 927,
       acOutput: 38.64,
@@ -459,11 +482,10 @@ describe("render", () => {
 
     expect(data.rvData.loads.acPower).toBe(850);
     expect(data.rvData.rvDcConsumption).toBeCloseTo(35.99, 10);
-    expect(container.querySelector("#rv-ac-load")?.textContent).toContain("850");
-    expect(container.querySelector("#rv-ac-load-icon")?.getAttribute("icon")).toBeNull();
-    expect((container.querySelector("#rv-ac-load-icon") as any)?.icon).toBe("mdi:power-socket-eu");
+    expect(container.querySelector("#rv-shore-total")?.textContent).toContain("927");
+    expect(container.querySelector(".rv-shore-ac-input")?.textContent).toContain("850");
     expect(
-      container.querySelector("#rv-shore-ac-load-flow")?.getAttribute("data-power-watts")
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
     ).toBe("850");
     expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
       "38.64"
@@ -477,23 +499,28 @@ describe("render", () => {
   test.each([
     { acPower: 0 as const, label: "zero" },
     { acPower: "unavailable" as const, label: "unavailable" },
-  ])("RV AC load $label never renders a flow", ({ acPower }) => {
+  ])("RV AC load $label never renders a distribution flow", ({ acPower }) => {
     const { container, data } = renderRvFlowScenario({ shoreInput: 927, acPower });
 
     expect(data.rvData.loads.acPower).toBe(0);
-    expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
-    expect(container.querySelector("#rv-ac-load")).not.toBeNull();
-    expect(container.querySelector("#rv-ac-load")?.getAttribute("data-active")).toBe("false");
+    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
+    expect(container.querySelector(".rv-shore-ac-input")).not.toBeNull();
+    expect(container.querySelector(".rv-shore-ac-input")?.classList).toContain(
+      "rv-shore-power-row--inactive"
+    );
   });
 
-  test("RV AC display_zero false hides a zero load bubble", () => {
+  test("RV distribution display_zero false hides zero power rows", () => {
     const config = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
       entities: { grid: { entity: "sensor.shore" } },
       rv: {
-        shore: { input_power: "sensor.shore" },
-        loads: { ac_power: "sensor.ac_load", ac_display: { display_zero: false } },
+        shore: {
+          input_power: "sensor.shore",
+          distribution_display: { display_zero: false },
+        },
+        loads: { ac_power: "sensor.ac_load" },
       },
     } as PowerFlowCardPlusConfig;
     const { container } = renderCard(
@@ -501,23 +528,24 @@ describe("render", () => {
       makeHass({ "sensor.shore": "927", "sensor.ac_load": "0" })
     );
 
-    expect(container.querySelector("#rv-ac-load")).toBeNull();
-    expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
+    expect(container.querySelector(".circle-container.grid")).not.toBeNull();
+    expect(container.querySelector(".rv-shore-ac-input")).toBeNull();
+    expect(container.querySelector(".rv-shore-dc-output")).toBeNull();
+    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
   });
 
-  test("RV AC load display options affect the visible component", () => {
+  test("RV shore total display options affect the visible component", () => {
     const config = {
       type: "custom:power-flow-card-plus",
       rv_mode: true,
       base_decimals: 0,
       entities: { grid: { entity: "sensor.shore" } },
       rv: {
-        shore: { input_power: "sensor.shore" },
-        loads: {
-          ac_power: "sensor.ac_load",
-          ac_display: {
-            name: "Steckdosen",
-            icon: "mdi:power-socket-de",
+        shore: {
+          input_power: "sensor.shore",
+          total_display: {
+            name: "Landstrom gesamt",
+            icon: "mdi:power-plug",
             color: [200, 20, 30],
             decimals: 1,
             unit_of_measurement: "W",
@@ -529,25 +557,26 @@ describe("render", () => {
             },
           },
         },
+        loads: { ac_power: "sensor.ac_load" },
       },
     } as PowerFlowCardPlusConfig;
     const { card, container } = renderCard(
       config,
       makeHass({
-        "sensor.shore": "100",
+        "sensor.shore": "100.14",
         "sensor.ac_load": "17.14",
         "sensor.ac_daily": "12.34",
       })
     );
 
-    expect(container.querySelector("#rv-ac-load")?.textContent).toContain("Steckdosen");
-    expect(container.querySelector("#rv-ac-load .rv-ac-load-value")?.textContent).toMatch(
-      /17[,.]1\s*W/
+    expect(container.querySelector("#rv-shore-total")?.textContent).toContain("Landstrom gesamt");
+    expect(container.querySelector("#rv-shore-total .rv-shore-total-value")?.textContent).toMatch(
+      /100[,.]1\s*W/
     );
-    expect(container.querySelector("#rv-ac-load .secondary-info")?.textContent).toMatch(
+    expect(container.querySelector("#rv-shore-total .secondary-info")?.textContent).toMatch(
       /12[,.]3\s*kWh/
     );
-    expect((container.querySelector("#rv-ac-load-icon") as any)?.icon).toBe("mdi:power-socket-de");
+    expect((container.querySelector("#rv-shore-total-icon") as any)?.icon).toBe("mdi:power-plug");
     expect((card as any).style.getPropertyValue("--rv-configured-ac-power-color")).toBe("#c8141e");
   });
 
@@ -555,8 +584,11 @@ describe("render", () => {
     const { container, data } = renderRvFlowScenario({ shoreInput: 0, acPower: 850 });
 
     expect(data.rvData.loads.acPower).toBe(850);
-    expect(container.querySelector("#rv-ac-load")?.getAttribute("data-active")).toBe("false");
-    expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
+    expect(container.querySelector("#rv-shore-total")?.getAttribute("data-active")).toBe("false");
+    expect(container.querySelector(".rv-shore-ac-input")?.classList).toContain(
+      "rv-shore-power-row--inactive"
+    );
+    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
   });
 
   test("RV shore bubble retains configured secondary information", () => {
@@ -567,11 +599,12 @@ describe("render", () => {
     });
 
     expect(
-      container.querySelector(".circle-container.grid span.secondary-info.grid")
+      container.querySelector("#rv-shore-total span.secondary-info.rv-shore-total")
     ).not.toBeNull();
     expect(
-      container.querySelector(".circle-container.grid span.secondary-info.grid")?.textContent
+      container.querySelector("#rv-shore-total span.secondary-info.rv-shore-total")?.textContent
     ).toContain("12");
+    expect(container.querySelector(".circle-container.grid span.secondary-info")).toBeNull();
     expect(container.querySelector(".rv-shore-power-values")).not.toBeNull();
   });
 
@@ -727,7 +760,8 @@ describe("render", () => {
     expect(data.rvData.cabinBattery.measuredIn).toBe(0);
     expect(data.rvData.cabinBattery.measuredOut).toBe(0);
     expect(data.rvData.rvDcConsumption).toBe(69);
-    expect(container.querySelector(".circle-container.grid .circle")?.textContent).toContain("13");
+    expect(container.querySelector("#rv-shore-total")?.textContent).toContain("13");
+    expect(container.querySelector(".rv-shore-dc-output")?.textContent).toContain("46");
     expect(container.querySelector(".circle-container.solar .circle")?.textContent).toContain("23");
     expect(container.querySelector("#home-circle")?.textContent).toContain("69");
     expect(container.querySelector("#home-circle")?.textContent).not.toContain("999");
@@ -1971,9 +2005,9 @@ describe("_computeRenderData", () => {
     expect(data.rvData.loads.dcPower).toBe(45);
     expect(data.rvData.loads.acPower).toBe(15);
     expect(data.rvData.loads.acPowerConfigured).toBe(true);
-    expect(container.querySelector("#rv-ac-load")).not.toBeNull();
+    expect(container.querySelector("#rv-shore-total")).not.toBeNull();
     expect(
-      container.querySelector("#rv-shore-ac-load-flow")?.getAttribute("data-power-watts")
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
     ).toBe("15");
     expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).not.toBeNull();
@@ -2011,7 +2045,7 @@ describe("_computeRenderData", () => {
       expect(data.rvData.loads.acPower).toBe(0);
       expect(data.rvData.loads.acPowerAvailable).toBe(expectedAvailable);
       expect(data.rvData.loads.acEntity).toBe("sensor.structured_ac");
-      expect(container.querySelector("#rv-shore-ac-load-flow")).toBeNull();
+      expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
     }
   );
 

@@ -498,10 +498,12 @@ export const styles = css`
   }
   .grid .circle.rv-shore-circle {
     gap: 1px;
+    border-color: var(--rv-distribution-color, var(--secondary-text-color));
   }
   .rv-shore-circle #grid-icon {
     --mdc-icon-size: 18px;
     padding-bottom: 0;
+    color: var(--rv-distribution-color, var(--secondary-text-color));
   }
   .rv-shore-power-values {
     display: grid;
@@ -534,34 +536,31 @@ export const styles = css`
     overflow: visible;
   }
   .rv-shore-ac-input .rv-shore-power-value,
-  .rv-shore-circle .secondary-info.grid,
-  .rv-shore-circle .secondary-info.grid ha-icon {
+  .rv-shore-ac-input .rv-shore-direction-label {
     color: var(--rv-ac-power-color);
   }
   .rv-shore-ac-input .rv-shore-power-value {
     font-weight: 600;
   }
-  .rv-shore-dc-output .rv-shore-power-value {
+  .rv-shore-dc-output .rv-shore-power-value,
+  .rv-shore-dc-output .rv-shore-direction-label {
     color: var(--energy-grid-consumption-color, #488fc2);
   }
   .rv-shore-power-row--inactive {
     opacity: 0.55;
   }
-  .rv-shore-circle--inactive .secondary-info.grid {
-    opacity: 0.55;
-  }
-  .circle-container.rv-ac-load {
+  .circle-container.rv-shore-total {
     height: 130px;
   }
-  .rv-ac-load .circle {
+  .rv-shore-total .circle {
     border-color: var(--rv-ac-power-color);
   }
-  .rv-ac-load .circle > ha-icon:not(.secondary-info),
-  .rv-ac-load .rv-ac-load-value,
-  .rv-ac-load .secondary-info {
+  .rv-shore-total .circle > ha-icon:not(.secondary-info),
+  .rv-shore-total .rv-shore-total-value,
+  .rv-shore-total .secondary-info {
     color: var(--rv-ac-power-color);
   }
-  .rv-ac-load--inactive .circle {
+  .rv-shore-total--inactive .circle {
     opacity: 0.55;
   }
   .home .circle {

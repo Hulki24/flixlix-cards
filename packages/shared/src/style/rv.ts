@@ -104,12 +104,15 @@ export const rvStyles = css`
     stroke-width: 4;
   }
 
-  path.rv-shore-ac-load-path,
-  circle.rv-shore-ac-load-dot {
+  path.rv-shore-distribution-path,
+  circle.rv-shore-distribution-dot,
+  path.rv-distribution-to-rv-ac-path,
+  circle.rv-distribution-to-rv-ac-dot {
     stroke: var(--rv-ac-power-color, #d32f2f);
   }
 
-  circle.rv-shore-ac-load-dot {
+  circle.rv-shore-distribution-dot,
+  circle.rv-distribution-to-rv-ac-dot {
     fill: var(--rv-ac-power-color, #d32f2f);
     stroke-width: 4;
   }

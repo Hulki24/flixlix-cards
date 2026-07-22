@@ -45,24 +45,6 @@ const colorValueField = {
   selector: { boolean: {} },
 } as const;
 
-const gridFlowColors = {
-  name: "color",
-  title: localize("editor.color"),
-  type: "expandable",
-  schema: [
-    {
-      name: "production",
-      label: localize("editor.rv_ac_input_color"),
-      selector: { color_rgb: {} },
-    },
-    {
-      name: "consumption",
-      label: localize("editor.rv_dc_output_color"),
-      selector: { color_rgb: {} },
-    },
-  ],
-} as const;
-
 const batteryFlowColors = {
   name: "color",
   title: localize("editor.color"),
@@ -95,7 +77,7 @@ const starterSecondaryInfo = {
   schema: [decimalsField, unitField, displayZeroField],
 } as const;
 
-const acLoadSecondaryInfo = {
+const shoreTotalSecondaryInfo = {
   name: "secondary_info",
   title: localize("editor.secondary_info"),
   type: "expandable",
@@ -113,15 +95,28 @@ const acLoadSecondaryInfo = {
   ],
 } as const;
 
-const acLoadDisplay = {
-  name: "ac_display",
-  title: localize("editor.rv_ac_display_options"),
+const shoreTotalDisplay = {
+  name: "total_display",
+  title: localize("editor.rv_shore_total_display"),
   type: "expandable",
   schema: [
     ...commonDisplayFields,
     { name: "color", label: localize("editor.color"), selector: { color_rgb: {} } },
     displayZeroField,
-    acLoadSecondaryInfo,
+    shoreTotalSecondaryInfo,
+  ],
+} as const;
+
+const distributionDisplay = {
+  name: "distribution_display",
+  title: localize("editor.rv_distribution_display"),
+  type: "expandable",
+  schema: [
+    { name: "name", label: localize("editor.name"), selector: { text: {} } },
+    { name: "icon", label: localize("editor.icon"), selector: { icon: {} } },
+    decimalsField,
+    displayZeroField,
+    { name: "color", label: localize("editor.color"), selector: { color_rgb: {} } },
   ],
 } as const;
 
@@ -132,13 +127,8 @@ export const rvEditorSchema = [
     type: "expandable",
     schema: [
       entityField("input_power", localize("editor.rv_input_power")),
-      displayGroup([
-        ...commonDisplayFields,
-        colorValueField,
-        displayZeroField,
-        gridFlowColors,
-        secondaryInfoField,
-      ]),
+      shoreTotalDisplay,
+      distributionDisplay,
     ],
   },
   {
@@ -240,7 +230,6 @@ export const rvEditorSchema = [
       entityField("total_power", localize("editor.rv_total_power")),
       entityField("ac_power", localize("editor.rv_ac_power")),
       entityField("dc_power", localize("editor.rv_dc_power")),
-      acLoadDisplay,
       displayGroup([...commonDisplayFields, colorValueField, displayZeroField, secondaryInfoField]),
     ],
   },

@@ -134,6 +134,8 @@ interface LegacyRvHouseBattery {
 
 export interface RvShoreConfig {
   input_power?: EntityId;
+  total_display?: RvBubbleDisplayConfig;
+  distribution_display?: RvDistributionDisplayConfig;
 }
 
 export interface RvOutputConfig {
@@ -189,7 +191,7 @@ export interface RvLoadsConfig {
   ac_display?: RvAcLoadDisplayConfig;
 }
 
-export interface RvAcLoadDisplayConfig extends ActionConfigSet {
+export interface RvBubbleDisplayConfig extends ActionConfigSet {
   name?: string;
   icon?: string;
   color?: string | number[];
@@ -198,6 +200,17 @@ export interface RvAcLoadDisplayConfig extends ActionConfigSet {
   unit_white_space?: boolean;
   display_zero?: boolean;
   secondary_info?: SecondaryInfoType;
+}
+
+/** @deprecated Retained as a compatibility alias for rv.loads.ac_display. */
+export type RvAcLoadDisplayConfig = RvBubbleDisplayConfig;
+
+export interface RvDistributionDisplayConfig {
+  name?: string;
+  icon?: string;
+  color?: string | number[];
+  decimals?: number;
+  display_zero?: boolean;
 }
 
 export interface RvConfig {

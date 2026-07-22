@@ -44,11 +44,44 @@ const rvOutputStruct = {
   output_current: optional(entityIdStruct),
 };
 
+const rvBubbleDisplayStruct = object({
+  name: optional(string()),
+  icon: optional(string()),
+  color: optional(any()),
+  decimals: optional(integer()),
+  unit_of_measurement: optional(string()),
+  unit_white_space: optional(boolean()),
+  display_zero: optional(boolean()),
+  secondary_info: optional(
+    object({
+      entity: optional(entityIdStruct),
+      icon: optional(string()),
+      decimals: optional(integer()),
+      unit_of_measurement: optional(string()),
+      unit_white_space: optional(boolean()),
+      display_zero: optional(boolean()),
+    })
+  ),
+  tap_action: optional(any()),
+  hold_action: optional(any()),
+  double_tap_action: optional(any()),
+});
+
+const rvDistributionDisplayStruct = object({
+  name: optional(string()),
+  icon: optional(string()),
+  color: optional(any()),
+  decimals: optional(integer()),
+  display_zero: optional(boolean()),
+});
+
 export const rvConfigStruct = object({
   // Neutral RV configuration.
   shore: optional(
     object({
       input_power: optional(entityIdStruct),
+      total_display: optional(rvBubbleDisplayStruct),
+      distribution_display: optional(rvDistributionDisplayStruct),
     })
   ),
   ac_charger: optional(
@@ -107,30 +140,7 @@ export const rvConfigStruct = object({
       total_power: optional(entityIdStruct),
       ac_power: optional(entityIdStruct),
       dc_power: optional(entityIdStruct),
-      ac_display: optional(
-        object({
-          name: optional(string()),
-          icon: optional(string()),
-          color: optional(any()),
-          decimals: optional(integer()),
-          unit_of_measurement: optional(string()),
-          unit_white_space: optional(boolean()),
-          display_zero: optional(boolean()),
-          secondary_info: optional(
-            object({
-              entity: optional(entityIdStruct),
-              icon: optional(string()),
-              decimals: optional(integer()),
-              unit_of_measurement: optional(string()),
-              unit_white_space: optional(boolean()),
-              display_zero: optional(boolean()),
-            })
-          ),
-          tap_action: optional(any()),
-          hold_action: optional(any()),
-          double_tap_action: optional(any()),
-        })
-      ),
+      ac_display: optional(rvBubbleDisplayStruct),
     })
   ),
 
