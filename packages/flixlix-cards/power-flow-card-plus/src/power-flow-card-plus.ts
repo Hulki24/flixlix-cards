@@ -41,7 +41,10 @@ import {
   getNonFossilSecondaryState,
 } from "@flixlix-cards/shared/states/raw/non-fossil";
 import { getSolarSecondaryState, getSolarState } from "@flixlix-cards/shared/states/raw/solar";
-import { getRvRuntimeData } from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
+import {
+  getRvRuntimeData,
+  isConfiguredEntity,
+} from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
 import { adjustZeroTolerance } from "@flixlix-cards/shared/states/tolerance/base";
 import { doesEntityExist } from "@flixlix-cards/shared/states/utils/existence-entity";
 import { getEntityState } from "@flixlix-cards/shared/states/utils/get-entity-state";
@@ -87,6 +90,7 @@ import { type UnsubscribeFunc } from "home-assistant-js-websocket";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import packageJson from "../package.json" with { type: "json" };
+import { type RvLoadStabilizationState, stabilizeRvDcConsumption } from "./rv-load-stabilizer";
 
 registerCustomCard({
   type: "power-flow-card-plus",
@@ -151,6 +155,9 @@ export class PowerFlowCardPlus extends LitElement {
         individualFieldRightBottom?: IndividualObject;
       }
     | undefined;
+  private _rvLoadStabilization?: RvLoadStabilizationState;
+  private _rvLoadReleaseTimeout?: ReturnType<typeof setTimeout>;
+  private _rvLoadReleaseAt?: number;
 
   setConfig(config: PowerFlowCardPlusConfig): void {
     if ((config.entities as any).individual1 || (config.entities as any).individual2) {
@@ -166,6 +173,8 @@ export class PowerFlowCardPlus extends LitElement {
     ) {
       throw new Error("At least one entity for battery, grid or solar must be defined");
     }
+    this._rvLoadStabilization = undefined;
+    this._clearRvLoadReleaseTimeout();
     this._config = {
       ...config,
       min_flow_rate: coerceNumber(config.min_flow_rate, defaultValues.minFlowRate),
@@ -202,7 +211,35 @@ export class PowerFlowCardPlus extends LitElement {
       document.removeEventListener("visibilitychange", this._handleVisibilityChange);
     }
     this._tryDisconnectAll();
+    this._clearRvLoadReleaseTimeout();
     super.disconnectedCallback();
+  }
+
+  private _clearRvLoadReleaseTimeout(): void {
+    if (this._rvLoadReleaseTimeout !== undefined) {
+      clearTimeout(this._rvLoadReleaseTimeout);
+      this._rvLoadReleaseTimeout = undefined;
+    }
+    this._rvLoadReleaseAt = undefined;
+  }
+
+  private _scheduleRvLoadRelease(holdUntil: number | null): void {
+    if (holdUntil === null) {
+      this._clearRvLoadReleaseTimeout();
+      return;
+    }
+    if (this._rvLoadReleaseAt === holdUntil) return;
+    this._clearRvLoadReleaseTimeout();
+    this._rvLoadReleaseAt = holdUntil;
+    this._rvLoadReleaseTimeout = setTimeout(
+      () => {
+        this._rvLoadReleaseTimeout = undefined;
+        this._rvLoadReleaseAt = undefined;
+        this._renderData = undefined;
+        this.requestUpdate();
+      },
+      Math.max(holdUntil - Date.now(), 0)
+    );
   }
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
@@ -584,7 +621,21 @@ export class PowerFlowCardPlus extends LitElement {
   private _computeRenderData() {
     const { entities } = this._config;
     const rvMode = resolveRvMode(this._config);
-    const rvData = getRvRuntimeData(this.hass, this._config, rvMode);
+    const rawRvData = getRvRuntimeData(this.hass, this._config, rvMode);
+    const stabilizedRvLoad = stabilizeRvDcConsumption({
+      rvData: rawRvData,
+      previous: this._rvLoadStabilization,
+      enabled:
+        rvMode &&
+        !rawRvData.loads.dcPowerConfigured &&
+        isConfiguredEntity(this._config.rv?.cabin_battery?.net_power),
+    });
+    this._rvLoadStabilization = stabilizedRvLoad.state;
+    this._scheduleRvLoadRelease(stabilizedRvLoad.state.holdUntil);
+    const rvData: RvRuntimeData = {
+      ...rawRvData,
+      rvDcConsumption: stabilizedRvLoad.value,
+    };
     const dcBusActive = [
       rvData.acCharger.outputPower,
       rvData.solarCharger.outputPower,

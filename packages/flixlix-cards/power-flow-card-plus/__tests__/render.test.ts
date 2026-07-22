@@ -29,14 +29,22 @@ import { PowerFlowCardPlus } from "../src/power-flow-card-plus";
   unobserve() {}
 };
 
-type HassState = { state: string; attributes: Record<string, unknown> };
+type HassState = {
+  state: string;
+  attributes: Record<string, unknown>;
+  last_updated?: string;
+};
 
-function makeHass(states: Record<string, string> = {}) {
+type HassStateInput = string | { state: string; last_updated?: string };
+
+function makeHass(states: Record<string, HassStateInput> = {}) {
   const hassStates: Record<string, HassState> = {};
-  for (const [entityId, state] of Object.entries(states)) {
+  for (const [entityId, input] of Object.entries(states)) {
+    const state = typeof input === "string" ? input : input.state;
     hassStates[entityId] = {
       state,
       attributes: { friendly_name: entityId, unit_of_measurement: "W" },
+      ...(typeof input === "string" ? {} : { last_updated: input.last_updated }),
     };
   }
   return {
@@ -49,12 +57,26 @@ function makeHass(states: Record<string, string> = {}) {
   } as any;
 }
 
+function updateHassState(
+  hass: ReturnType<typeof makeHass>,
+  entityId: string,
+  state: number,
+  lastUpdated: string
+): void {
+  hass.states[entityId] = {
+    ...hass.states[entityId],
+    state: String(state),
+    last_updated: lastUpdated,
+  };
+}
+
 function makeCard(config: PowerFlowCardPlusConfig, hass: ReturnType<typeof makeHass>) {
   const card = new PowerFlowCardPlus();
   card.setConfig(config);
   card.hass = hass;
   card.connectedCallback();
   return card as unknown as {
+    hass: ReturnType<typeof makeHass>;
     render: () => unknown;
     _width: number;
     _computeRenderData: () => ReturnType<typeof computeRenderDataShape>;
@@ -167,6 +189,51 @@ function renderRvFlowScenario({
 
   const rendered = renderCard(config, hass, 500);
   return { ...rendered, data: rendered.card._computeRenderData() };
+}
+
+function makeRvTransitionCard({
+  acOutput,
+  solarOutput,
+  boosterOutput = 0,
+  batteryNet,
+  dcPower,
+  lastUpdated = "2026-07-22T10:00:00.000Z",
+}: {
+  acOutput: number;
+  solarOutput: number;
+  boosterOutput?: number;
+  batteryNet: number;
+  dcPower?: number;
+  lastUpdated?: string;
+}) {
+  const config = {
+    type: "custom:power-flow-card-plus",
+    rv_mode: true,
+    entities: {
+      grid: { entity: "sensor.shore" },
+      solar: { entity: "sensor.solar_output" },
+      battery: { entity: "sensor.battery_net" },
+      home: { name: "RV" },
+    },
+    rv: {
+      shore: { input_power: "sensor.shore" },
+      ac_charger: { output_power: "sensor.ac_output" },
+      solar_charger: { output_power: "sensor.solar_output" },
+      booster: { output_power: "sensor.booster_output" },
+      cabin_battery: { net_power: "sensor.battery_net" },
+      ...(dcPower === undefined ? {} : { loads: { dc_power: "sensor.dc_load" } }),
+    },
+  } as PowerFlowCardPlusConfig;
+  const timedState = (state: number) => ({ state: String(state), last_updated: lastUpdated });
+  const hass = makeHass({
+    "sensor.shore": timedState(acOutput > 0 ? acOutput : 0),
+    "sensor.ac_output": timedState(acOutput),
+    "sensor.solar_output": timedState(solarOutput),
+    "sensor.booster_output": timedState(boosterOutput),
+    "sensor.battery_net": timedState(batteryNet),
+    ...(dcPower === undefined ? {} : { "sensor.dc_load": timedState(dcPower) }),
+  });
+  return { card: makeCard(config, hass), hass };
 }
 
 // Used only as a type reference — actual return shape is inferred from _computeRenderData
@@ -533,9 +600,9 @@ describe("render", () => {
     expect(data.battery.state.toBattery).toBe(22.8);
     expect(data.battery.state.fromBattery).toBe(0);
     expect(container.querySelector("#home-circle")?.textContent).toContain("33");
-    expect(
-      container.querySelector("#rv-solar-dc-bus-flow")?.getAttribute("data-power-watts")
-    ).toBe("56.13");
+    expect(container.querySelector("#rv-solar-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
+      "56.13"
+    );
     expect(
       container.querySelector("#rv-dc-bus-to-cabin-battery-flow")?.getAttribute("data-power-watts")
     ).toBe("22.8");
@@ -571,6 +638,107 @@ describe("render", () => {
     expect(data.rvData.cabinBattery.measuredOut).toBe(0);
     expect(data.rvData.loads.dcPowerConfigured).toBe(false);
     expect(data.rvData.rvDcConsumption).toBeCloseTo(32.68, 10);
+  });
+
+  test("stable source and battery timestamps expose the physical residual load", () => {
+    const { card } = makeRvTransitionCard({
+      acOutput: 426,
+      solarOutput: 35,
+      batteryNet: 408,
+    });
+    const data = card._computeRenderData();
+    const container = document.createElement("div");
+    renderTemplate(card.render() as any, container);
+
+    expect(data.rvData.rvDcConsumption).toBe(53);
+    expect(container.querySelector("#home-circle")?.textContent).toContain("53");
+    expect(container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")).toBe(
+      "53"
+    );
+  });
+
+  test("holds the last stable load until battery net power updates after shore starts", () => {
+    const { card, hass } = makeRvTransitionCard({
+      acOutput: 0,
+      solarOutput: 35,
+      batteryNet: 22,
+    });
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(13);
+
+    updateHassState(hass, "sensor.ac_output", 426, "2026-07-22T10:00:01.000Z");
+    const waiting = card._computeRenderData();
+    expect(waiting.rvData.acCharger.outputPower).toBe(426);
+    expect(waiting.rvData.cabinBattery.measuredIn).toBe(22);
+    expect(waiting.rvData.rvDcConsumption).toBe(13);
+
+    updateHassState(hass, "sensor.battery_net", 408, "2026-07-22T10:00:02.000Z");
+    const settled = card._computeRenderData();
+    expect(settled.rvData.cabinBattery.measuredIn).toBe(408);
+    expect(settled.rvData.rvDcConsumption).toBe(53);
+  });
+
+  test("releases a held residual load after fifteen seconds without a battery update", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-22T10:00:00.000Z"));
+    const { card, hass } = makeRvTransitionCard({
+      acOutput: 0,
+      solarOutput: 35,
+      batteryNet: 22,
+    });
+    try {
+      expect(card._computeRenderData().rvData.rvDcConsumption).toBe(13);
+      updateHassState(hass, "sensor.ac_output", 426, "2026-07-22T10:00:01.000Z");
+      expect(card._computeRenderData().rvData.rvDcConsumption).toBe(13);
+
+      vi.advanceTimersByTime(14_999);
+      expect(card._computeRenderData().rvData.rvDcConsumption).toBe(13);
+      vi.advanceTimersByTime(1);
+      expect(card._computeRenderData().rvData.rvDcConsumption).toBe(439);
+    } finally {
+      card.disconnectedCallback();
+      vi.useRealTimers();
+    }
+  });
+
+  test("holds the last stable load until battery net power updates after shore stops", () => {
+    const { card, hass } = makeRvTransitionCard({
+      acOutput: 426,
+      solarOutput: 35,
+      batteryNet: 408,
+    });
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(53);
+
+    updateHassState(hass, "sensor.ac_output", 0, "2026-07-22T10:00:01.000Z");
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(53);
+
+    updateHassState(hass, "sensor.battery_net", 22, "2026-07-22T10:00:02.000Z");
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(13);
+  });
+
+  test("an explicit DC load bypasses source-transition stabilization", () => {
+    const { card, hass } = makeRvTransitionCard({
+      acOutput: 0,
+      solarOutput: 35,
+      batteryNet: 22,
+      dcPower: 41,
+    });
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(41);
+
+    updateHassState(hass, "sensor.ac_output", 426, "2026-07-22T10:00:01.000Z");
+    updateHassState(hass, "sensor.dc_load", 42, "2026-07-22T10:00:01.000Z");
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(42);
+  });
+
+  test("source changes below five watts do not start a hold", () => {
+    const { card, hass } = makeRvTransitionCard({
+      acOutput: 0,
+      solarOutput: 35,
+      batteryNet: 22,
+    });
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBe(13);
+
+    updateHassState(hass, "sensor.solar_output", 39.99, "2026-07-22T10:00:01.000Z");
+    expect(card._computeRenderData().rvData.rvDcConsumption).toBeCloseTo(17.99, 10);
   });
 
   test("mixed RV sources balance only at the DC bus without classic direct flows", () => {
@@ -1227,15 +1395,16 @@ describe("_computeRenderData", () => {
     const data = makeCard(
       config,
       makeHass({
-        "sensor.ac_power": "204",
-        "sensor.ac_voltage": "20",
-        "sensor.ac_current": "20",
+        "sensor.ac_power": { state: "204", last_updated: "2026-07-22T10:00:03.000Z" },
+        "sensor.ac_voltage": { state: "20", last_updated: "2026-07-22T10:00:01.000Z" },
+        "sensor.ac_current": { state: "20", last_updated: "2026-07-22T10:00:02.000Z" },
         "sensor.classic_grid": "0",
       })
     )._computeRenderData();
 
     expect(data.rvData.acCharger.has).toBe(true);
     expect(data.rvData.acCharger.outputPower).toBe(204);
+    expect(data.rvData.acCharger.outputLastUpdated).toBe(Date.parse("2026-07-22T10:00:03.000Z"));
   });
 
   test("structured runtime data falls back to voltage times current", () => {
@@ -1254,13 +1423,20 @@ describe("_computeRenderData", () => {
       config,
       makeHass({
         "sensor.classic_grid": "0",
-        "sensor.booster_voltage": "15",
-        "sensor.booster_current": "20",
+        "sensor.booster_voltage": {
+          state: "15",
+          last_updated: "2026-07-22T10:00:01.000Z",
+        },
+        "sensor.booster_current": {
+          state: "20",
+          last_updated: "2026-07-22T10:00:02.000Z",
+        },
       })
     )._computeRenderData();
 
     expect(data.rvData.booster.has).toBe(true);
     expect(data.rvData.booster.outputPower).toBe(300);
+    expect(data.rvData.booster.outputLastUpdated).toBe(Date.parse("2026-07-22T10:00:02.000Z"));
   });
 
   test("unknown and unavailable structured values resolve safely", () => {

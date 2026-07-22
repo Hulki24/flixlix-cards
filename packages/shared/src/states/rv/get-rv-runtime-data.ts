@@ -10,6 +10,11 @@ import { type HomeAssistant } from "custom-card-helpers";
 const ENTITY_ID_PATTERN = /^[a-z0-9_]+\.[a-z0-9_]+$/i;
 const INVALID_STATES = new Set(["unknown", "unavailable", "undefined"]);
 
+interface ResolvedPowerMeasurement {
+  value: number;
+  lastUpdated: number | null;
+}
+
 export function isConfiguredEntity(entity: unknown): entity is string {
   if (typeof entity !== "string") return false;
   const ids = entity.split("|").map((id) => id.trim());
@@ -40,6 +45,23 @@ export function resolveEntityPower(hass: HomeAssistant, entity: unknown): number
   return Number.isFinite(value) ? value : null;
 }
 
+function entityLastUpdated(hass: HomeAssistant, entity: unknown): number | null {
+  if (!isConfiguredEntity(entity)) return null;
+  const timestamps = entity
+    .split("|")
+    .map((id) => Date.parse(hass.states[id.trim()]?.last_updated ?? ""))
+    .filter(Number.isFinite);
+  return timestamps.length > 0 ? Math.max(...timestamps) : null;
+}
+
+function resolveEntityPowerMeasurement(
+  hass: HomeAssistant,
+  entity: unknown
+): ResolvedPowerMeasurement | null {
+  const value = resolveEntityPower(hass, entity);
+  return value === null ? null : { value, lastUpdated: entityLastUpdated(hass, entity) };
+}
+
 export function resolveVoltageCurrentPower(
   hass: HomeAssistant,
   voltageEntity: unknown,
@@ -50,6 +72,20 @@ export function resolveVoltageCurrentPower(
   if (voltage === null || current === null) return null;
   const value = voltage * current;
   return Number.isFinite(value) ? value : null;
+}
+
+function resolveVoltageCurrentPowerMeasurement(
+  hass: HomeAssistant,
+  voltageEntity: unknown,
+  currentEntity: unknown
+): ResolvedPowerMeasurement | null {
+  const value = resolveVoltageCurrentPower(hass, voltageEntity, currentEntity);
+  if (value === null) return null;
+  const timestamps = [
+    entityLastUpdated(hass, voltageEntity),
+    entityLastUpdated(hass, currentEntity),
+  ].filter((timestamp): timestamp is number => timestamp !== null);
+  return { value, lastUpdated: timestamps.length > 0 ? Math.max(...timestamps) : null };
 }
 
 export function resolveOptionalState(hass: HomeAssistant, entity: unknown): string | null {
@@ -87,6 +123,17 @@ function resolveFirstAvailablePower(hass: HomeAssistant, ...entities: unknown[])
   return null;
 }
 
+function resolveFirstAvailablePowerMeasurement(
+  hass: HomeAssistant,
+  ...entities: unknown[]
+): ResolvedPowerMeasurement | null {
+  for (const entity of entities) {
+    const measurement = resolveEntityPowerMeasurement(hass, entity);
+    if (measurement !== null) return measurement;
+  }
+  return null;
+}
+
 function resolveFirstAvailableNumber(hass: HomeAssistant, ...entities: unknown[]): number | null {
   for (const entity of entities) {
     const value = resolveOptionalNumber(hass, entity);
@@ -102,11 +149,29 @@ function resolveStructuredPowerWithFallback(
   currentEntity: unknown,
   ...legacyEntities: unknown[]
 ): number {
+  return resolveStructuredPowerMeasurementWithFallback(
+    hass,
+    powerEntity,
+    voltageEntity,
+    currentEntity,
+    ...legacyEntities
+  ).value;
+}
+
+function resolveStructuredPowerMeasurementWithFallback(
+  hass: HomeAssistant,
+  powerEntity: unknown,
+  voltageEntity: unknown,
+  currentEntity: unknown,
+  ...legacyEntities: unknown[]
+): ResolvedPowerMeasurement {
   return (
-    resolveEntityPower(hass, powerEntity) ??
-    resolveVoltageCurrentPower(hass, voltageEntity, currentEntity) ??
-    resolveFirstAvailablePower(hass, ...legacyEntities) ??
-    0
+    resolveEntityPowerMeasurement(hass, powerEntity) ??
+    resolveVoltageCurrentPowerMeasurement(hass, voltageEntity, currentEntity) ??
+    resolveFirstAvailablePowerMeasurement(hass, ...legacyEntities) ?? {
+      value: 0,
+      lastUpdated: null,
+    }
   );
 }
 
@@ -169,34 +234,53 @@ export function getRvRuntimeData(
   const legacyAcLoadEntities = [rv?.ac_load?.entity];
   const legacyDcLoadEntities = [rv?.dc_load?.entity];
 
-  const legacyCharge = resolveFirstAvailablePower(hass, ...legacyChargeEntities) ?? 0;
-  const legacyDischarge = resolveFirstAvailablePower(hass, ...legacyDischargeEntities) ?? 0;
-  const netPower = resolveEntityPower(hass, cabinNetEntity) ?? legacyCharge - legacyDischarge;
+  const legacyChargeMeasurement = resolveFirstAvailablePowerMeasurement(
+    hass,
+    ...legacyChargeEntities
+  );
+  const legacyDischargeMeasurement = resolveFirstAvailablePowerMeasurement(
+    hass,
+    ...legacyDischargeEntities
+  );
+  const legacyCharge = legacyChargeMeasurement?.value ?? 0;
+  const legacyDischarge = legacyDischargeMeasurement?.value ?? 0;
+  const cabinNetMeasurement = resolveEntityPowerMeasurement(hass, cabinNetEntity);
+  const netPower = cabinNetMeasurement?.value ?? legacyCharge - legacyDischarge;
+  const legacyBatteryTimestamps = [
+    legacyChargeMeasurement?.lastUpdated,
+    legacyDischargeMeasurement?.lastUpdated,
+  ].filter((timestamp): timestamp is number => timestamp !== null && timestamp !== undefined);
+  const netPowerLastUpdated =
+    cabinNetMeasurement?.lastUpdated ??
+    (legacyBatteryTimestamps.length > 0 ? Math.max(...legacyBatteryTimestamps) : null);
 
   const ac = rv?.ac_charger;
   const solar = rv?.solar_charger;
   const booster = rv?.booster;
-  const acChargerOutput = resolveStructuredPowerWithFallback(
+  const acChargerOutputMeasurement = resolveStructuredPowerMeasurementWithFallback(
     hass,
     ac?.output_power,
     ac?.output_voltage,
     ac?.output_current,
     ...legacyAcChargerOutputEntities
   );
-  const solarChargerOutput = resolveStructuredPowerWithFallback(
+  const acChargerOutput = acChargerOutputMeasurement.value;
+  const solarChargerOutputMeasurement = resolveStructuredPowerMeasurementWithFallback(
     hass,
     solar?.output_power,
     solar?.output_voltage,
     solar?.output_current,
     ...legacySolarEntities
   );
-  const boosterOutput = resolveStructuredPowerWithFallback(
+  const solarChargerOutput = solarChargerOutputMeasurement.value;
+  const boosterOutputMeasurement = resolveStructuredPowerMeasurementWithFallback(
     hass,
     booster?.output_power,
     booster?.output_voltage,
     booster?.output_current,
     ...legacyBoosterEntities
   );
+  const boosterOutput = boosterOutputMeasurement.value;
   const batteryFlows = normalizeRvBatteryFlows(Math.max(netPower, 0), Math.max(-netPower, 0));
   const totalPower =
     resolveFirstAvailablePower(hass, rv?.loads?.total_power, ...legacyTotalLoadEntities) ?? 0;
@@ -248,6 +332,7 @@ export function getRvRuntimeData(
       inputCurrent: resolveOptionalNumber(hass, ac?.input_current),
       outputVoltage: resolveOptionalNumber(hass, ac?.output_voltage),
       outputCurrent: resolveOptionalNumber(hass, ac?.output_current),
+      outputLastUpdated: acChargerOutputMeasurement.lastUpdated,
     },
     solarCharger: {
       has: hasAnyConfiguredEntity(
@@ -261,6 +346,7 @@ export function getRvRuntimeData(
       outputPower: solarChargerOutput,
       outputVoltage: resolveOptionalNumber(hass, solar?.output_voltage),
       outputCurrent: resolveOptionalNumber(hass, solar?.output_current),
+      outputLastUpdated: solarChargerOutputMeasurement.lastUpdated,
     },
     booster: {
       has: hasAnyConfiguredEntity(
@@ -285,6 +371,7 @@ export function getRvRuntimeData(
       inputCurrent: resolveOptionalNumber(hass, booster?.input_current),
       outputVoltage: resolveOptionalNumber(hass, booster?.output_voltage),
       outputCurrent: resolveOptionalNumber(hass, booster?.output_current),
+      outputLastUpdated: boosterOutputMeasurement.lastUpdated,
     },
     cabinBattery: {
       has: hasAnyConfiguredEntity(
@@ -302,6 +389,7 @@ export function getRvRuntimeData(
       voltage: resolveOptionalNumber(hass, rv?.cabin_battery?.voltage),
       stateOfCharge: resolveFirstAvailableNumber(hass, ...cabinStateOfChargeEntities),
       chargingState: resolveOptionalState(hass, rv?.cabin_battery?.charging_state),
+      netPowerLastUpdated,
     },
     starterBattery: {
       has: hasAnyConfiguredEntity(

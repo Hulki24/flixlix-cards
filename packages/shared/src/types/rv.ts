@@ -13,6 +13,7 @@ export interface RvChargerRuntimeData {
   inputCurrent: number | null;
   outputVoltage: number | null;
   outputCurrent: number | null;
+  outputLastUpdated: number | null;
 }
 
 export interface RvSolarChargerRuntimeData {
@@ -21,6 +22,7 @@ export interface RvSolarChargerRuntimeData {
   outputPower: number;
   outputVoltage: number | null;
   outputCurrent: number | null;
+  outputLastUpdated: number | null;
 }
 
 export interface RvCabinBatteryRuntimeData {
@@ -31,6 +33,7 @@ export interface RvCabinBatteryRuntimeData {
   voltage: number | null;
   stateOfCharge: number | null;
   chargingState: string | null;
+  netPowerLastUpdated: number | null;
 }
 
 export interface RvStarterBatteryRuntimeData {
