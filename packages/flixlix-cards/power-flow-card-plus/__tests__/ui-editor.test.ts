@@ -1,9 +1,14 @@
 import { render as renderTemplate } from "lit";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import localize from "@flixlix-cards/shared/i18n";
 import { generalConfigSchema } from "../src/ui-editor/schema/_schema-all";
 import { rvEditorSchema } from "../src/ui-editor/schema/rv";
-import { PowerFlowCardPlusEditor } from "../src/ui-editor/ui-editor";
+import {
+  applyRvEditorValue,
+  buildRvEditorData,
+  PowerFlowCardPlusEditor,
+} from "../src/ui-editor/ui-editor";
 
 const { loadHaFormMock } = vi.hoisted(() => ({
   loadHaFormMock: vi.fn(),
@@ -63,12 +68,9 @@ describe("power flow ui editor", () => {
       "Booster",
       "Cabin Battery",
       "Starter Battery",
-      "Loads",
+      "RV",
     ]);
     expect(rvEditorSchema.every((group) => group.type === "expandable")).toBe(true);
-    expect(
-      rvEditorSchema.every((group) => group.schema.every((field) => "entity" in field.selector))
-    ).toBe(true);
     expect(JSON.stringify(rvEditorSchema)).not.toMatch(/Victron|Orion|IP22|Shelly/i);
   });
 
@@ -78,7 +80,7 @@ describe("power flow ui editor", () => {
     );
 
     expect(fields).toEqual({
-      shore: ["input_power"],
+      shore: ["input_power", "display"],
       ac_charger: [
         "state",
         "input_power",
@@ -88,7 +90,7 @@ describe("power flow ui editor", () => {
         "output_voltage",
         "output_current",
       ],
-      solar_charger: ["state", "output_power", "output_voltage", "output_current"],
+      solar_charger: ["state", "output_power", "output_voltage", "output_current", "display"],
       booster: [
         "state",
         "input_power",
@@ -97,10 +99,20 @@ describe("power flow ui editor", () => {
         "output_power",
         "output_voltage",
         "output_current",
+        "color",
       ],
-      cabin_battery: ["net_power", "voltage", "state_of_charge", "charging_state"],
-      starter_battery: ["voltage", "power"],
-      loads: ["total_power", "ac_power", "dc_power"],
+      cabin_battery: ["net_power", "voltage", "state_of_charge", "charging_state", "display"],
+      starter_battery: [
+        "voltage",
+        "power",
+        "name",
+        "icon",
+        "decimals",
+        "unit_of_measurement",
+        "color",
+        "secondary_info",
+      ],
+      loads: ["total_power", "ac_power", "dc_power", "display"],
     });
   });
 
@@ -144,10 +156,10 @@ describe("power flow ui editor", () => {
     const help = container.querySelector(".rv-editor-help")?.textContent ?? "";
 
     expect(form.schema).toBe(rvEditorSchema);
-    expect(form.data).toEqual(config.rv);
+    expect(form.data).toEqual(buildRvEditorData(config as any));
     expect(help).toContain("Power entities take precedence over voltage × current");
     expect(help).toContain("positive means charging, negative means discharging");
-    expect(help).toContain("overrides the internal DC consumption calculation");
+    expect(help).toContain("RV DC power overrides the internal DC consumption calculation");
     expect(help).toContain("Conversion losses are not rendered as an energy flow");
   });
 
@@ -179,6 +191,113 @@ describe("power flow ui editor", () => {
     });
     expect(config.rv_mode).toBe(true);
     expect(config.entities.grid).toEqual({ entity: "sensor.grid" });
+  });
+
+  test("RV display options reuse existing entity display configuration", () => {
+    const current = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      base_decimals: 2,
+      entities: {
+        grid: { entity: "sensor.shore", name: "Old shore" },
+        solar: { entity: "sensor.solar" },
+        battery: { entity: "sensor.battery" },
+        home: { entity: "sensor.home" },
+      },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        loads: { dc_power: "sensor.rv_dc" },
+      },
+    } as any;
+
+    const editorData = buildRvEditorData(current);
+    expect((editorData.shore as any).display).toMatchObject({ name: "Old shore" });
+
+    const updated = applyRvEditorValue(current, {
+      ...editorData,
+      shore: {
+        input_power: "sensor.shore",
+        display: {
+          name: "Landstrom",
+          icon: "mdi:power-plug",
+          decimals: 0,
+          unit_of_measurement: "W",
+          display_zero: false,
+          color: { production: [120, 80, 180], consumption: [40, 120, 200] },
+        },
+      },
+      solar_charger: {
+        output_power: "sensor.solar_output",
+        display: { name: "Solar", decimals: 1 },
+      },
+      cabin_battery: {
+        net_power: "sensor.battery_net",
+        display: { name: "Cabin Battery", state_of_charge_decimals: 0 },
+      },
+      loads: {
+        dc_power: "sensor.rv_dc",
+        display: { name: "RV", decimals: 0 },
+      },
+    });
+
+    expect(updated.rv?.shore).toEqual({ input_power: "sensor.shore" });
+    expect(updated.rv?.loads).toEqual({ dc_power: "sensor.rv_dc" });
+    expect((updated.rv?.shore as any)?.display).toBeUndefined();
+    expect((updated.rv?.loads as any)?.display).toBeUndefined();
+    expect(updated.entities.grid).toMatchObject({
+      entity: "sensor.shore",
+      name: "Landstrom",
+      decimals: 0,
+      display_zero: false,
+    });
+    expect(updated.entities.solar).toMatchObject({ entity: "sensor.solar", decimals: 1 });
+    expect(updated.entities.battery).toMatchObject({
+      entity: "sensor.battery",
+      state_of_charge_decimals: 0,
+    });
+    expect(updated.entities.home).toMatchObject({ entity: "sensor.home", decimals: 0 });
+    expect(updated.base_decimals).toBe(2);
+  });
+
+  test("RV display schema only exposes effective options for visible components", () => {
+    const groups = Object.fromEntries(rvEditorSchema.map((group) => [group.name, group]));
+    const displayNames = (group: keyof typeof groups) =>
+      ((groups[group].schema.find((field) => field.name === "display") as any)?.schema ?? []).map(
+        (field: any) => field.name
+      );
+
+    expect(displayNames("shore")).toEqual([
+      "name",
+      "icon",
+      "decimals",
+      "unit_of_measurement",
+      "color_value",
+      "display_zero",
+      "color",
+      "secondary_info",
+    ]);
+    expect(displayNames("solar_charger")).toEqual([
+      "name",
+      "icon",
+      "decimals",
+      "unit_of_measurement",
+      "color_value",
+      "display_zero",
+      "color",
+      "secondary_info",
+    ]);
+    expect(displayNames("cabin_battery")).toContain("state_of_charge_decimals");
+    expect(displayNames("cabin_battery")).toContain("show_state_of_charge");
+    expect(displayNames("loads")).toContain("secondary_info");
+    expect(groups.booster.schema.map((field) => field.name)).not.toContain("icon");
+  });
+
+  test("RV editor translations name loads as RV in English and German", () => {
+    localStorage.setItem("selectedLanguage", "en");
+    expect(localize("editor.rv_loads")).toBe("RV");
+    localStorage.setItem("selectedLanguage", "de");
+    expect(localize("editor.rv_loads")).toBe("RV");
+    localStorage.removeItem("selectedLanguage");
   });
 
   test("empty optional RV fields and empty groups are omitted", () => {

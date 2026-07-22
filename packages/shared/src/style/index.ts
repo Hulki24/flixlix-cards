@@ -515,8 +515,15 @@ export const styles = css`
     white-space: nowrap;
   }
   .rv-shore-power-arrow {
-    color: var(--secondary-text-color);
-    font-size: 11px;
+    --mdc-icon-size: 12px;
+    flex: 0 0 12px;
+    padding: 0;
+  }
+  .rv-shore-power-arrow--ac {
+    color: var(--energy-shore-ac-input-color, var(--energy-grid-return-color, #a280db));
+  }
+  .rv-shore-power-arrow--dc {
+    color: var(--energy-grid-consumption-color, #488fc2);
   }
   .rv-shore-power-value {
     color: var(--primary-text-color);

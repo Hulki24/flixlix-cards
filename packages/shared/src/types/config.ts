@@ -115,9 +115,8 @@ interface Home extends BaseConfigEntity {
   secondary_info?: SecondaryInfoType;
   circle_animation?: boolean;
   hide?: boolean;
+  display_zero?: boolean;
 }
-
-
 
 /** Home Assistant entity ID; validated structurally at configuration boundaries. */
 export type EntityId = string;
@@ -155,6 +154,7 @@ export interface RvBoosterConfig extends RvOutputConfig {
   input_power?: EntityId;
   input_voltage?: EntityId;
   input_current?: EntityId;
+  color?: string | number[];
 }
 
 export interface RvCabinBatteryConfig {
@@ -169,6 +169,16 @@ export interface RvStarterBatteryConfig {
   power?: EntityId;
   /** @deprecated Legacy RV field retained for compatibility. */
   current?: EntityId;
+  name?: string;
+  icon?: string;
+  decimals?: number;
+  unit_of_measurement?: string;
+  color?: string | number[];
+  secondary_info?: {
+    decimals?: number;
+    unit_of_measurement?: string;
+    display_zero?: boolean;
+  };
 }
 
 export interface RvLoadsConfig {

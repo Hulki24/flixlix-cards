@@ -499,7 +499,7 @@ export class PowerFlowCardPlus extends LitElement {
               </div>`
             : nothing}
           <div class="row">
-            ${grid.has || rvMode
+            ${grid.has
               ? gridElement(this, this._config, {
                   entities,
                   grid,
@@ -513,7 +513,8 @@ export class PowerFlowCardPlus extends LitElement {
                 })
               : spacer}
             ${rvMode ? dcBusElement(dcBus) : spacer}
-            ${!entities.home?.hide
+            ${!entities.home?.hide &&
+            !(rvMode && entities.home?.display_zero === false && rvData.rvDcConsumption === 0)
               ? homeElement(this, this._config, {
                   CIRCLE_CIRCUMFERENCE,
                   entities,
@@ -536,7 +537,12 @@ export class PowerFlowCardPlus extends LitElement {
           checkHasBottomIndividual(individualObjs)
             ? html`<div class="row">
                 ${rvMode && rvData.starterBattery.has
-                  ? starterBatteryElement(this.hass, this._config, rvData.starterBattery)
+                  ? starterBatteryElement(
+                      this.hass,
+                      this._config,
+                      rvData.starterBattery,
+                      this._config.rv?.starter_battery
+                    )
                   : spacer}
                 ${battery.has ? batteryElement(this, this._config, { battery, entities }) : spacer}
                 ${individualFieldLeftBottom
@@ -557,7 +563,13 @@ export class PowerFlowCardPlus extends LitElement {
                   : nothing}
               </div>`
             : spacer}
-          ${rvMode ? boosterNodeElement(rvData.booster, this._width <= 420) : nothing}
+          ${rvMode
+            ? boosterNodeElement(
+                rvData.booster,
+                this._width <= 420,
+                this._config.rv?.booster?.color
+              )
+            : nothing}
           ${flowElement(
             this._config,
             {
@@ -663,7 +675,10 @@ export class PowerFlowCardPlus extends LitElement {
     const initialNumericState = null as null | number;
     const grid: GridObject = {
       entity: entities.grid?.entity,
-      has: rvMode ? rvData.shore.has : entities?.grid?.entity !== undefined,
+      has: rvMode
+        ? rvData.shore.has &&
+          (entities.grid?.display_zero !== false || rvData.shore.inputPower !== 0)
+        : entities?.grid?.entity !== undefined,
       hasReturnToGrid:
         typeof entities.grid?.entity === "string" || !!entities.grid?.entity?.production,
       state: {
@@ -693,6 +708,9 @@ export class PowerFlowCardPlus extends LitElement {
         typeof entities.grid?.entity === "object"
           ? entities.grid.entity.consumption || entities.grid.entity.production
           : entities.grid?.entity,
+      decimals: rvMode ? entities.grid?.decimals : undefined,
+      unit: rvMode ? entities.grid?.unit_of_measurement : undefined,
+      unit_white_space: rvMode ? entities.grid?.unit_white_space : undefined,
       color: {
         fromGrid: entities.grid?.color?.consumption,
         toGrid: entities.grid?.color?.production,
@@ -735,6 +753,9 @@ export class PowerFlowCardPlus extends LitElement {
       has: hasSolarEntity && displayZero,
       state: {
         total: rvMode ? rvData.solarCharger.outputPower : getSolarState(this.hass, this._config),
+        decimals: rvMode ? entities.solar?.decimals : undefined,
+        unit: rvMode ? entities.solar?.unit_of_measurement : undefined,
+        unit_white_space: rvMode ? entities.solar?.unit_white_space : undefined,
         toHome: initialNumericState,
         toGrid: initialNumericState,
         toBattery: initialNumericState,
@@ -771,7 +792,12 @@ export class PowerFlowCardPlus extends LitElement {
     };
     const battery = {
       entity: entities.battery?.entity,
-      has: rvMode ? rvData.cabinBattery.has : checkIfHasBattery(),
+      has: rvMode
+        ? rvData.cabinBattery.has &&
+          (entities.battery?.display_zero !== false ||
+            rvData.cabinBattery.measuredIn !== 0 ||
+            rvData.cabinBattery.measuredOut !== 0)
+        : checkIfHasBattery(),
       mainEntity:
         typeof entities.battery?.entity === "object"
           ? entities.battery.entity.consumption
@@ -783,11 +809,16 @@ export class PowerFlowCardPlus extends LitElement {
       ),
       icon: computeFieldIcon(this.hass, entities.battery, "mdi:battery-high"),
       state_of_charge: {
-        state: getBatteryStateOfCharge(this.hass, this._config),
+        state: rvMode
+          ? rvData.cabinBattery.stateOfCharge
+          : getBatteryStateOfCharge(this.hass, this._config),
         unit: entities?.battery?.state_of_charge_unit ?? "%",
         unit_white_space: entities?.battery?.state_of_charge_unit_white_space ?? true,
-        decimals: entities?.battery?.state_of_charge_decimals || 0,
+        decimals: entities?.battery?.state_of_charge_decimals ?? 0,
       },
+      decimals: rvMode ? entities.battery?.decimals : undefined,
+      unit: rvMode ? entities.battery?.unit_of_measurement : undefined,
+      unit_white_space: rvMode ? entities.battery?.unit_white_space : undefined,
       state: {
         toBattery: rvMode
           ? rvData.cabinBattery.measuredIn
@@ -1000,6 +1031,7 @@ export class PowerFlowCardPlus extends LitElement {
       ? displayValue(this.hass, this._config, rvData.rvDcConsumption, {
           unit: entities.home?.unit_of_measurement,
           unitWhiteSpace: entities.home?.unit_white_space,
+          decimals: entities.home?.decimals,
         })
       : entities.home?.override_state && entities.home.entity
         ? entities.home?.subtract_individual

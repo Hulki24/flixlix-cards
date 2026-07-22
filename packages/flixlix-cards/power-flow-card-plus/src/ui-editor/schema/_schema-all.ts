@@ -72,6 +72,7 @@ export const rvConfigStruct = object({
       output_power: rvOutputStruct.output_power,
       output_voltage: rvOutputStruct.output_voltage,
       output_current: rvOutputStruct.output_current,
+      color: optional(any()),
     })
   ),
   cabin_battery: optional(
@@ -87,6 +88,18 @@ export const rvConfigStruct = object({
       voltage: optional(entityIdStruct),
       power: optional(entityIdStruct),
       current: optional(legacyEntityIdStruct),
+      name: optional(string()),
+      icon: optional(string()),
+      decimals: optional(integer()),
+      unit_of_measurement: optional(string()),
+      color: optional(any()),
+      secondary_info: optional(
+        object({
+          decimals: optional(integer()),
+          unit_of_measurement: optional(string()),
+          display_zero: optional(boolean()),
+        })
+      ),
     })
   ),
   loads: optional(

@@ -18,6 +18,7 @@ import {
   resolveOptionalState,
   resolveVoltageCurrentPower,
 } from "@flixlix-cards/shared/states/rv/get-rv-runtime-data";
+import { styles as cardStyles } from "@flixlix-cards/shared/style";
 import { type PowerFlowCardPlusConfig } from "@flixlix-cards/shared/types";
 import { render as renderTemplate } from "lit";
 import { PowerFlowCardPlus } from "../src/power-flow-card-plus";
@@ -110,6 +111,7 @@ function renderRvFlowScenario({
   starterPower,
   gridSecondary,
   baseDecimals,
+  gridDecimals,
 }: {
   shoreInput?: number;
   acOutput?: number;
@@ -125,6 +127,7 @@ function renderRvFlowScenario({
   starterPower?: number;
   gridSecondary?: number;
   baseDecimals?: number;
+  gridDecimals?: number;
 }) {
   const resolvedShoreInput = shoreInput ?? Math.max(acOutput, 0);
   const boosterConfigured =
@@ -138,6 +141,7 @@ function renderRvFlowScenario({
     entities: {
       grid: {
         entity: "sensor.shore",
+        ...(gridDecimals === undefined ? {} : { decimals: gridDecimals }),
         ...(gridSecondary === undefined
           ? {}
           : { secondary_info: { entity: "sensor.shore_daily" } }),
@@ -374,37 +378,56 @@ describe("render", () => {
     expect(container.querySelector("#solar-home-flow")).toBeNull();
   });
 
-  test("RV shore bubble uses compact arrows and zero base decimals", () => {
+  test("RV shore bubble uses compact arrows and zero component decimals", () => {
     const { container } = renderRvFlowScenario({
       shoreInput: 457.4,
       acOutput: 426.3,
-      baseDecimals: 0,
+      baseDecimals: 2,
+      gridDecimals: 0,
     });
     const inputRow = container.querySelector(".rv-shore-ac-input");
     const outputRow = container.querySelector(".rv-shore-dc-output");
-    const compactText = (element: Element | null) =>
-      element?.textContent?.replace(/\s/g, "").trim();
+    const inputArrow = inputRow?.querySelector("ha-icon") as any;
+    const outputArrow = outputRow?.querySelector("ha-icon") as any;
 
-    expect(compactText(inputRow)).toBe("→457W");
-    expect(compactText(outputRow)).toBe("426W→");
-    expect(container.querySelector(".rv-shore-power-values")?.textContent).not.toContain("AC in");
-    expect(container.querySelector(".rv-shore-power-values")?.textContent).not.toContain("DC out");
+    expect(inputRow?.querySelector(".rv-shore-power-value")?.textContent).toContain("457");
+    expect(outputRow?.querySelector(".rv-shore-power-value")?.textContent).toContain("426");
+    expect(inputArrow.icon).toBe("mdi:arrow-right");
+    expect(outputArrow.icon).toBe("mdi:arrow-right");
+    expect(inputRow?.firstElementChild).toBe(inputArrow);
+    expect(outputRow?.lastElementChild).toBe(outputArrow);
+    expect(inputArrow.classList).toContain("rv-shore-power-arrow--ac");
+    expect(outputArrow.classList).toContain("rv-shore-power-arrow--dc");
+    expect(container.querySelector(".rv-shore-power-values")?.textContent).not.toContain("→");
     expect(container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")).toBe(
       "426.3"
     );
   });
 
-  test("RV shore arrow values honor one configured base decimal", () => {
+  test("RV shore arrow values honor one component decimal over the global fallback", () => {
     const { container } = renderRvFlowScenario({
       shoreInput: 17.14,
       acOutput: 7.16,
-      baseDecimals: 1,
+      baseDecimals: 0,
+      gridDecimals: 1,
     });
-    const inputText = container.querySelector(".rv-shore-ac-input")?.textContent ?? "";
-    const outputText = container.querySelector(".rv-shore-dc-output")?.textContent ?? "";
+    const inputText =
+      container.querySelector(".rv-shore-ac-input .rv-shore-power-value")?.textContent ?? "";
+    const outputText =
+      container.querySelector(".rv-shore-dc-output .rv-shore-power-value")?.textContent ?? "";
 
-    expect(inputText).toMatch(/→\s*17[,.]1\s*W/);
-    expect(outputText).toMatch(/7[,.]2\s*W\s*→/);
+    expect(inputText).toMatch(/17[,.]1\s*W/);
+    expect(outputText).toMatch(/7[,.]2\s*W/);
+  });
+
+  test("RV shore arrow colors distinguish AC input and match the DC bus flow", () => {
+    const cssText = cardStyles.cssText;
+
+    expect(cssText).toMatch(
+      /rv-shore-power-arrow--ac[\s\S]*energy-shore-ac-input-color[\s\S]*energy-grid-return-color/
+    );
+    expect(cssText).toMatch(/rv-shore-power-arrow--dc[\s\S]*energy-grid-consumption-color/);
+    expect(cssText).toMatch(/rv-shore-dc-bus-path[\s\S]*energy-grid-consumption-color/);
   });
 
   test("RV shore bubble retains configured secondary information", () => {
@@ -421,6 +444,38 @@ describe("render", () => {
       container.querySelector(".circle-container.grid span.secondary-info.grid")?.textContent
     ).toContain("12");
     expect(container.querySelector(".rv-shore-power-values")).not.toBeNull();
+  });
+
+  test("RV bubble display_zero options hide only configured zero-value bubbles", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      entities: {
+        grid: { entity: "sensor.shore", display_zero: false },
+        solar: { entity: "sensor.solar", display_zero: false },
+        battery: { entity: "sensor.battery", display_zero: false },
+        home: { entity: "sensor.home", display_zero: false },
+      },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        solar_charger: { output_power: "sensor.solar" },
+        cabin_battery: { net_power: "sensor.battery" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { container } = renderCard(
+      config,
+      makeHass({
+        "sensor.shore": "0",
+        "sensor.solar": "0",
+        "sensor.battery": "0",
+        "sensor.home": "0",
+      })
+    );
+
+    expect(container.querySelector(".circle-container.grid")).toBeNull();
+    expect(container.querySelector(".circle-container.solar")).toBeNull();
+    expect(container.querySelector(".circle-container.battery")).toBeNull();
+    expect(container.querySelector(".circle-container.home")).toBeNull();
   });
 
   test("RV source flows suppress zero values even when zero-lines are enabled", () => {
@@ -479,11 +534,11 @@ describe("render", () => {
           .querySelector(".rv-shore-dc-output .rv-shore-power-value")
           ?.getAttribute("data-power-watts")
       ).toBe("0");
-      expect(container.querySelector(".rv-shore-ac-input")?.textContent?.replace(/\s/g, "")).toBe(
-        "→0W"
+      expect((container.querySelector(".rv-shore-ac-input ha-icon") as any)?.icon).toBe(
+        "mdi:arrow-right"
       );
-      expect(container.querySelector(".rv-shore-dc-output")?.textContent?.replace(/\s/g, "")).toBe(
-        "0W→"
+      expect((container.querySelector(".rv-shore-dc-output ha-icon") as any)?.icon).toBe(
+        "mdi:arrow-right"
       );
       expect(container.querySelector(".rv-shore-ac-input")?.classList).toContain(
         "rv-shore-power-row--inactive"
@@ -518,8 +573,12 @@ describe("render", () => {
         .querySelector(".rv-shore-dc-output .rv-shore-power-value")
         ?.getAttribute("data-power-watts")
     ).toBe("20.4");
-    expect(container.querySelector(".rv-shore-ac-input")?.textContent).toMatch(/→\s*0\s*W/);
-    expect(container.querySelector(".rv-shore-dc-output")?.textContent).toMatch(/20[,.]4\s*W\s*→/);
+    expect(
+      container.querySelector(".rv-shore-ac-input .rv-shore-power-value")?.textContent
+    ).toMatch(/0\s*W/);
+    expect(
+      container.querySelector(".rv-shore-dc-output .rv-shore-power-value")?.textContent
+    ).toMatch(/20[,.]4\s*W/);
     expect(container.querySelector(".rv-shore-dc-output")?.classList).toContain(
       "rv-shore-power-row--inactive"
     );

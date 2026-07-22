@@ -84,6 +84,117 @@ export function sanitizeRvEditorValue(value: unknown): PowerFlowCardPlusConfig["
   return removeEmptyOptionalValues(value) as PowerFlowCardPlusConfig["rv"] | undefined;
 }
 
+const RV_DISPLAY_TARGETS = {
+  shore: "grid",
+  solar_charger: "solar",
+  cabin_battery: "battery",
+  loads: "home",
+} as const;
+
+const RV_DISPLAY_KEYS = {
+  shore: [
+    "name",
+    "icon",
+    "decimals",
+    "unit_of_measurement",
+    "color",
+    "color_value",
+    "display_zero",
+    "secondary_info",
+  ],
+  solar_charger: [
+    "name",
+    "icon",
+    "decimals",
+    "unit_of_measurement",
+    "color",
+    "color_value",
+    "display_zero",
+    "secondary_info",
+  ],
+  cabin_battery: [
+    "name",
+    "icon",
+    "decimals",
+    "unit_of_measurement",
+    "color",
+    "color_value",
+    "display_zero",
+    "state_of_charge_decimals",
+    "state_of_charge_unit",
+    "show_state_of_charge",
+  ],
+  loads: [
+    "name",
+    "icon",
+    "decimals",
+    "unit_of_measurement",
+    "color_value",
+    "display_zero",
+    "secondary_info",
+  ],
+} as const;
+
+type RvDisplayGroup = keyof typeof RV_DISPLAY_TARGETS;
+
+function pickDisplayValues(
+  value: Record<string, unknown> | undefined,
+  keys: readonly string[]
+): Record<string, unknown> {
+  if (!value) return {};
+  return Object.fromEntries(keys.filter((key) => key in value).map((key) => [key, value[key]]));
+}
+
+export function buildRvEditorData(config: PowerFlowCardPlusConfig): Record<string, unknown> {
+  const rv = config.rv ?? {};
+  const data = { ...rv } as Record<string, unknown>;
+  for (const group of Object.keys(RV_DISPLAY_TARGETS) as RvDisplayGroup[]) {
+    const target = RV_DISPLAY_TARGETS[group];
+    const rvGroup = (rv[group] ?? {}) as Record<string, unknown>;
+    data[group] = {
+      ...rvGroup,
+      display: pickDisplayValues(
+        config.entities[target] as unknown as Record<string, unknown> | undefined,
+        RV_DISPLAY_KEYS[group]
+      ),
+    };
+  }
+  return data;
+}
+
+export function applyRvEditorValue(
+  current: PowerFlowCardPlusConfig,
+  value: Record<string, unknown>
+): PowerFlowCardPlusConfig {
+  const rvValue = { ...value };
+  const entities = { ...current.entities } as Record<string, unknown>;
+
+  for (const group of Object.keys(RV_DISPLAY_TARGETS) as RvDisplayGroup[]) {
+    const rawGroup = (rvValue[group] ?? {}) as Record<string, unknown>;
+    if (!("display" in rawGroup)) continue;
+    const { display, ...technicalValues } = rawGroup;
+    rvValue[group] = technicalValues;
+
+    const target = RV_DISPLAY_TARGETS[group];
+    const entityConfig = {
+      ...((entities[target] ?? {}) as Record<string, unknown>),
+    };
+    for (const key of RV_DISPLAY_KEYS[group]) delete entityConfig[key];
+    const sanitizedDisplay = removeEmptyOptionalValues(
+      pickDisplayValues(display as Record<string, unknown> | undefined, RV_DISPLAY_KEYS[group])
+    ) as Record<string, unknown> | undefined;
+    const updatedEntity = { ...entityConfig, ...(sanitizedDisplay ?? {}) };
+    if (Object.keys(updatedEntity).length > 0) entities[target] = updatedEntity;
+    else delete entities[target];
+  }
+
+  const config = { ...current, entities } as PowerFlowCardPlusConfig;
+  const rv = sanitizeRvEditorValue(rvValue);
+  if (rv === undefined) delete config.rv;
+  else config.rv = rv;
+  return config;
+}
+
 @customElement("power-flow-card-plus-editor")
 export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -119,7 +230,7 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
         <ul>
           <li>Power entities take precedence over voltage × current.</li>
           <li>Battery net power: positive means charging, negative means discharging.</li>
-          <li>Loads DC power overrides the internal DC consumption calculation.</li>
+          <li>RV DC power overrides the internal DC consumption calculation.</li>
           <li>Conversion losses are not rendered as an energy flow.</li>
         </ul>
       </ha-alert>
@@ -279,7 +390,7 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
         currentPage === "advanced"
           ? data
           : currentPage === "rv"
-            ? (data.rv ?? {})
+            ? buildRvEditorData(this._config)
             : data.entities[currentPage];
       return html`
         ${this._renderLegacyFieldsAlert()}${this._renderLegacyIndividualFieldsAlert()}
@@ -345,13 +456,7 @@ export class PowerFlowCardPlusEditor extends LitElement implements LovelaceCardE
     }
 
     if (this._currentConfigPage === "rv") {
-      const rv = sanitizeRvEditorValue(config);
-      config = { ...this._config };
-      if (rv === undefined) {
-        delete config.rv;
-      } else {
-        config.rv = rv;
-      }
+      config = applyRvEditorValue(this._config, config);
     } else if (
       this._currentConfigPage !== null &&
       this._currentConfigPage !== "advanced" &&

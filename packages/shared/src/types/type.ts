@@ -61,6 +61,7 @@ export interface BaseConfigEntity extends ActionConfigSet {
   display_zero_tolerance?: number;
   unit_of_measurement?: string;
   unit_white_space?: boolean;
+  decimals?: number;
   use_metadata?: boolean;
   secondary_info?: SecondaryInfoType;
   invert_state?: boolean;
@@ -163,6 +164,9 @@ export type GridObject = {
   icon: string;
   name: string;
   mainEntity: string | undefined;
+  decimals?: number;
+  unit?: string;
+  unit_white_space?: boolean;
   color: {
     fromGrid?: string;
     toGrid?: string;

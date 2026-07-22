@@ -95,11 +95,16 @@ export const gridElement = (
                 ? ""
                 : "rv-shore-power-row--inactive"}"
             >
-              <span class="rv-shore-power-arrow" aria-hidden="true">→</span>
+              <ha-icon
+                class="small rv-shore-power-arrow rv-shore-power-arrow--ac"
+                .icon=${"mdi:arrow-right"}
+                aria-hidden="true"
+              ></ha-icon>
               <span class="rv-shore-power-value" data-power-watts=${rvPower.inputPower}
                 >${displayValue(main.hass, config, rvPower.inputPower, {
                   unit: grid.unit,
                   unitWhiteSpace: grid.unit_white_space,
+                  decimals: grid.decimals,
                 })}</span
               >
             </span>
@@ -113,9 +118,14 @@ export const gridElement = (
                 >${displayValue(main.hass, config, rvPower.outputPower, {
                   unit: grid.unit,
                   unitWhiteSpace: grid.unit_white_space,
+                  decimals: grid.decimals,
                 })}</span
               >
-              <span class="rv-shore-power-arrow" aria-hidden="true">→</span>
+              <ha-icon
+                class="small rv-shore-power-arrow rv-shore-power-arrow--dc"
+                .icon=${"mdi:arrow-right"}
+                aria-hidden="true"
+              ></ha-icon>
             </span>
           </div>`
         : nothing}
