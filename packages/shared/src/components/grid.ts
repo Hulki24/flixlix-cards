@@ -15,12 +15,22 @@ export const gridElement = (
     entities,
     grid,
     templatesObj,
-  }: { entities: ConfigEntities; grid: any; templatesObj: TemplatesObj }
+    rvPower,
+  }: {
+    entities: ConfigEntities;
+    grid: any;
+    templatesObj: TemplatesObj;
+    rvPower?: { inputPower: number; outputPower: number };
+  }
 ) => {
   const disableEntityClick = config.clickable_entities === false;
+  const rvPowerDecimals = (value: number) =>
+    Number.isInteger(value) ? undefined : Math.max(config.base_decimals ?? 0, 1);
   return html`<div class="circle-container grid">
     <div
-      class="circle ${disableEntityClick ? "pointer-events-none" : ""}"
+      class="circle ${rvPower ? "rv-shore-circle" : ""} ${disableEntityClick
+        ? "pointer-events-none"
+        : ""}"
       @click=${(e: MouseEvent) => {
         const outageTarget =
           grid.powerOutage?.entityGenerator ?? entities.grid?.power_outage?.entity;
@@ -77,6 +87,42 @@ export const gridElement = (
       <ha-ripple .disabled=${disableEntityClick}></ha-ripple>
       ${generalSecondarySpan(main.hass, main, config, templatesObj, grid, "grid")}
       ${grid.icon !== " " ? html` <ha-icon id="grid-icon" .icon=${grid.icon}></ha-icon>` : nothing}
+      ${rvPower
+        ? html`<div
+            class="rv-shore-power-values"
+            data-active=${rvPower.inputPower > 0 ? "true" : "false"}
+          >
+            <span
+              class="rv-shore-power-row rv-shore-ac-input ${rvPower.inputPower > 0
+                ? ""
+                : "rv-shore-power-row--inactive"}"
+            >
+              <span class="rv-shore-power-label">AC in</span>
+              <span class="rv-shore-power-value" data-power-watts=${rvPower.inputPower}
+                >${displayValue(main.hass, config, rvPower.inputPower, {
+                  unit: grid.unit,
+                  unitWhiteSpace: grid.unit_white_space,
+                  decimals: rvPowerDecimals(rvPower.inputPower),
+                })}</span
+              >
+            </span>
+            <span
+              class="rv-shore-power-row rv-shore-dc-output ${rvPower.inputPower > 0 &&
+              rvPower.outputPower > 0
+                ? ""
+                : "rv-shore-power-row--inactive"}"
+            >
+              <span class="rv-shore-power-label">DC out</span>
+              <span class="rv-shore-power-value" data-power-watts=${rvPower.outputPower}
+                >${displayValue(main.hass, config, rvPower.outputPower, {
+                  unit: grid.unit,
+                  unitWhiteSpace: grid.unit_white_space,
+                  decimals: rvPowerDecimals(rvPower.outputPower),
+                })}</span
+              >
+            </span>
+          </div>`
+        : nothing}
       ${(entities.grid?.display_state === "two_way" ||
         entities.grid?.display_state === undefined ||
         (entities.grid?.display_state === "one_way_no_zero" && (grid.state.toGrid ?? 0) > 0) ||
@@ -84,6 +130,7 @@ export const gridElement = (
           (grid.state.fromGrid === null || grid.state.fromGrid === 0) &&
           grid.state.toGrid !== 0)) &&
       grid.state.toGrid !== null &&
+      !rvPower &&
       !grid.powerOutage.isOutage
         ? html`<span
             class="return"
@@ -139,8 +186,9 @@ export const gridElement = (
         (entities.grid?.display_state === "one_way" &&
           (grid.state.toGrid === null || grid.state.toGrid === 0))) &&
         grid.state.fromGrid !== null &&
+        !rvPower &&
         !grid.powerOutage.isOutage) ||
-      (grid.powerOutage.isOutage && !!grid.powerOutage.entityGenerator)
+      (!rvPower && grid.powerOutage.isOutage && !!grid.powerOutage.entityGenerator)
         ? html` <span
             class="consumption"
             @click=${(e: MouseEvent) => {

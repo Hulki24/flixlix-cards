@@ -108,6 +108,7 @@ function renderRvFlowScenario({
   boosterState,
   starterVoltage,
   starterPower,
+  gridSecondary,
 }: {
   shoreInput?: number;
   acOutput?: number;
@@ -121,6 +122,7 @@ function renderRvFlowScenario({
   boosterState?: string;
   starterVoltage?: number;
   starterPower?: number;
+  gridSecondary?: number;
 }) {
   const resolvedShoreInput = shoreInput ?? Math.max(acOutput, 0);
   const boosterConfigured =
@@ -131,7 +133,12 @@ function renderRvFlowScenario({
     rv_mode: true,
     display_zero_lines: { mode: "show" },
     entities: {
-      grid: { entity: "sensor.shore" },
+      grid: {
+        entity: "sensor.shore",
+        ...(gridSecondary === undefined
+          ? {}
+          : { secondary_info: { entity: "sensor.shore_daily" } }),
+      },
       solar: { entity: "sensor.classic_solar" },
       battery: { entity: "sensor.legacy_battery" },
       home: { entity: "sensor.classic_home", name: "RV", override_state: true },
@@ -171,6 +178,7 @@ function renderRvFlowScenario({
     "sensor.solar_state": solarState,
     "sensor.battery_net": String(batteryNet),
     "sensor.classic_home": "999",
+    ...(gridSecondary === undefined ? {} : { "sensor.shore_daily": String(gridSecondary) }),
     ...(boosterConfigured
       ? {
           "sensor.booster_state": boosterState ?? "unknown",
@@ -363,6 +371,47 @@ describe("render", () => {
     expect(container.querySelector("#solar-home-flow")).toBeNull();
   });
 
+  test.each([
+    { shoreInput: 457, chargerOutput: 426, inputText: "457", outputText: "426" },
+    { shoreInput: 17, chargerOutput: 7.1, inputText: "17", outputText: "7.1" },
+  ])(
+    "RV shore bubble separates $shoreInput W AC input from $chargerOutput W DC output",
+    ({ shoreInput, chargerOutput, inputText, outputText }) => {
+      const { container } = renderRvFlowScenario({
+        shoreInput,
+        acOutput: chargerOutput,
+      });
+      const input = container.querySelector(".rv-shore-ac-input .rv-shore-power-value");
+      const output = container.querySelector(".rv-shore-dc-output .rv-shore-power-value");
+
+      expect(container.querySelector(".rv-shore-ac-input")?.textContent).toContain("AC in");
+      expect(container.querySelector(".rv-shore-dc-output")?.textContent).toContain("DC out");
+      expect(input?.textContent).toContain(inputText);
+      expect(output?.textContent).toContain(outputText);
+      expect(input?.getAttribute("data-power-watts")).toBe(String(shoreInput));
+      expect(output?.getAttribute("data-power-watts")).toBe(String(chargerOutput));
+      expect(
+        container.querySelector("#rv-shore-dc-bus-flow")?.getAttribute("data-power-watts")
+      ).toBe(String(chargerOutput));
+    }
+  );
+
+  test("RV shore bubble retains configured secondary information", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 457,
+      acOutput: 426,
+      gridSecondary: 12,
+    });
+
+    expect(
+      container.querySelector(".circle-container.grid span.secondary-info.grid")
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".circle-container.grid span.secondary-info.grid")?.textContent
+    ).toContain("12");
+    expect(container.querySelector(".rv-shore-power-values")).not.toBeNull();
+  });
+
   test("RV source flows suppress zero values even when zero-lines are enabled", () => {
     const config = {
       type: "custom:power-flow-card-plus",
@@ -406,6 +455,19 @@ describe("render", () => {
       expect(data.rvData.shore.inputPower).toBe(0);
       expect(data.grid.has).toBe(true);
       expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+      expect(container.querySelector(".rv-shore-power-values")?.getAttribute("data-active")).toBe(
+        "false"
+      );
+      expect(
+        container
+          .querySelector(".rv-shore-ac-input .rv-shore-power-value")
+          ?.getAttribute("data-power-watts")
+      ).toBe("0");
+      expect(
+        container
+          .querySelector(".rv-shore-dc-output .rv-shore-power-value")
+          ?.getAttribute("data-power-watts")
+      ).toBe("0");
     }
   );
 
@@ -419,6 +481,22 @@ describe("render", () => {
     expect(data.rvData.acCharger.outputPower).toBe(20);
     expect(data.rvData.rvDcConsumption).toBe(20);
     expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
+    expect(container.querySelector(".rv-shore-power-values")?.getAttribute("data-active")).toBe(
+      "false"
+    );
+    expect(
+      container
+        .querySelector(".rv-shore-ac-input .rv-shore-power-value")
+        ?.getAttribute("data-power-watts")
+    ).toBe("0");
+    expect(
+      container
+        .querySelector(".rv-shore-dc-output .rv-shore-power-value")
+        ?.getAttribute("data-power-watts")
+    ).toBe("20");
+    expect(container.querySelector(".rv-shore-dc-output")?.classList).toContain(
+      "rv-shore-power-row--inactive"
+    );
   });
 
   test("shore and charger output remain distinct measurement points in the RV balance", () => {
@@ -938,6 +1016,20 @@ describe("render", () => {
     expect(container.querySelector("#solar-home-flow")).not.toBeNull();
     expect(container.querySelector("#rv-shore-dc-bus-flow")).toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).toBeNull();
+  });
+
+  test("house mode retains the classic single-value grid bubble", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      entities: { grid: { entity: "sensor.grid" } },
+    } as PowerFlowCardPlusConfig;
+    const { container } = renderCard(config, makeHass({ "sensor.grid": "44" }));
+
+    expect(container.querySelector(".rv-shore-power-values")).toBeNull();
+    expect(container.querySelector(".circle-container.grid span.consumption")).not.toBeNull();
+    expect(
+      container.querySelector(".circle-container.grid span.consumption")?.textContent
+    ).toContain("44");
   });
 
   test("DC bus layout node is rendered only in RV mode", () => {

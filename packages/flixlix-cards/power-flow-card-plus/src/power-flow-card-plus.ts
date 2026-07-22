@@ -504,6 +504,12 @@ export class PowerFlowCardPlus extends LitElement {
                   entities,
                   grid,
                   templatesObj,
+                  rvPower: rvMode
+                    ? {
+                        inputPower: rvData.shore.inputPower,
+                        outputPower: rvData.acCharger.outputPower,
+                      }
+                    : undefined,
                 })
               : spacer}
             ${rvMode ? dcBusElement(dcBus) : spacer}

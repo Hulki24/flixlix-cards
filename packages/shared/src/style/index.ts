@@ -492,6 +492,43 @@ export const styles = css`
   .grid ha-icon:not(.small) {
     color: var(--icon-grid-color);
   }
+  .grid .circle.rv-shore-circle {
+    gap: 1px;
+  }
+  .rv-shore-circle #grid-icon {
+    --mdc-icon-size: 18px;
+    padding-bottom: 0;
+  }
+  .rv-shore-power-values {
+    display: grid;
+    gap: 1px;
+    width: 68px;
+    font-size: 10px;
+    line-height: 11px;
+  }
+  .rv-shore-power-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 3px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .rv-shore-power-label {
+    color: var(--secondary-text-color);
+    font-size: 9px;
+  }
+  .rv-shore-power-value {
+    color: var(--primary-text-color);
+    font-weight: 500;
+    overflow: visible;
+  }
+  .rv-shore-ac-input .rv-shore-power-value {
+    font-weight: 600;
+  }
+  .rv-shore-power-row--inactive {
+    opacity: 0.55;
+  }
   .home .circle {
     border-width: 0;
     border-color: var(--primary-color);
