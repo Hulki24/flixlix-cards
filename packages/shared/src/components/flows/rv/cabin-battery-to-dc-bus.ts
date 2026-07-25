@@ -1,19 +1,16 @@
 import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
-import {
-  checkHasBottomIndividual,
-  checkHasRightIndividual,
-} from "@flixlix-cards/shared/utils/compute-individual-position";
 import { html, nothing, svg } from "lit";
-import { classMap } from "lit/directives/class-map.js";
 import { type Flows } from "../index";
-import { RV_DC_FLOW_Y } from "./layout";
+import {
+  CABIN_BATTERY_TOP,
+  DC_BUS_CENTER,
+  RV_VERTICAL_COLUMN_WIDTH,
+} from "./anchors";
 
 export function flowCabinBatteryToDcBus(
   config: FlowCardPlusConfig,
   {
-    battery,
-    individual,
     newDur,
     rvData,
   }: Pick<Flows, "battery" | "individual" | "newDur"> & { rvData: RvRuntimeData }
@@ -22,25 +19,18 @@ export function flowCabinBatteryToDcBus(
   if (!rvData.rvMode || !rvData.cabinBattery.has || value <= 0) return nothing;
   const duration = newDur.cabinBatteryToDcBus ?? config.max_flow_rate;
 
-  return html`<div
-    class="lines rv-dc-battery-flow-lines ${classMap({
-      high: battery.has || checkHasBottomIndividual(individual),
-      "individual1-individual2": !battery.has && individual.every((entry) => entry?.has),
-      "multi-individual": checkHasRightIndividual(individual),
-    })}"
-  >
+  return html`<div class="rv-flow-lines rv-battery-column-flow-lines rv-dc-battery-flow-lines">
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 ${RV_VERTICAL_COLUMN_WIDTH} 100"
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="none"
       id="rv-cabin-battery-to-dc-bus-flow"
-      class="flat-line"
       data-power-watts=${String(value)}
     >
       <path
         id="rv-cabin-battery-to-dc-bus-path"
         class="rv-cabin-battery-to-dc-bus-path"
-        d="M50,100 V${RV_DC_FLOW_Y}"
+        d="M${CABIN_BATTERY_TOP.x},${CABIN_BATTERY_TOP.y} V${DC_BUS_CENTER.verticalFromBelow.y}"
         vector-effect="non-scaling-stroke"
       ></path>
       ${checkShouldShowDots(config)

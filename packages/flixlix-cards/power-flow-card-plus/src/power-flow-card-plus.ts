@@ -516,30 +516,41 @@ export class PowerFlowCardPlus extends LitElement {
           id="power-flow-card-plus"
           style=${this._config.style_card_content ? this._config.style_card_content : ""}
         >
-          ${showShoreTotal ||
+          ${rvMode ||
+          showShoreTotal ||
           solar.has ||
           individualObjs?.some((individual) => individual?.has) ||
           nonFossil.hasPercentage
             ? html`<div class="row">
                 ${showShoreTotal
-                  ? shoreTotalElement(this, this._config, rvData.shore, shoreTotalDisplay)
-                  : nonFossilElement(this, this._config, {
-                      entities,
-                      grid,
-                      newDur,
-                      nonFossil,
-                      templatesObj,
-                    })}
+                  ? shoreTotalElement(
+                      this,
+                      this._config,
+                      rvData.shore,
+                      shoreTotalDisplay,
+                      newDur.shoreToDistribution ?? this._config.max_flow_rate
+                    )
+                  : rvMode
+                    ? spacer
+                    : nonFossilElement(this, this._config, {
+                        entities,
+                        grid,
+                        newDur,
+                        nonFossil,
+                        templatesObj,
+                      })}
                 ${solar.has
                   ? solarElement(this, this._config, {
                       entities,
                       solar,
                       templatesObj,
                     })
-                  : individualObjs?.some((individual) => individual?.has)
+                  : rvMode || individualObjs?.some((individual) => individual?.has)
                     ? spacer
                     : nothing}
-                ${individualFieldLeftTop
+                ${rvMode
+                  ? spacer
+                  : individualFieldLeftTop
                   ? individualLeftTopElement(this, this._config, {
                       individualObj: individualFieldLeftTop,
                       displayState: getIndividualDisplayState(individualFieldLeftTop),
@@ -547,7 +558,7 @@ export class PowerFlowCardPlus extends LitElement {
                       templatesObj,
                     })
                   : spacer}
-                ${checkHasRightIndividual(individualObjs)
+                ${!rvMode && checkHasRightIndividual(individualObjs)
                   ? individualRightTopElement(this, this._config, {
                       displayState: getIndividualDisplayState(individualFieldRightTop),
                       individualObj: individualFieldRightTop,
@@ -576,7 +587,7 @@ export class PowerFlowCardPlus extends LitElement {
                     : undefined,
                 })
               : spacer}
-            ${rvMode ? dcBusElement(dcBus) : spacer}
+            ${rvMode ? (dcBus.has ? dcBusElement(dcBus) : spacer) : spacer}
             ${!entities.home?.hide &&
             !(
               rvMode &&
@@ -609,9 +620,10 @@ export class PowerFlowCardPlus extends LitElement {
                     : undefined,
                 })
               : spacer}
-            ${checkHasRightIndividual(individualObjs) ? spacer : nothing}
+            ${!rvMode && checkHasRightIndividual(individualObjs) ? spacer : nothing}
           </div>
-          ${battery.has ||
+          ${rvMode ||
+          battery.has ||
           (rvMode && rvData.starterBattery.has) ||
           checkHasBottomIndividual(individualObjs)
             ? html`<div class="row">
@@ -624,7 +636,9 @@ export class PowerFlowCardPlus extends LitElement {
                     )
                   : spacer}
                 ${battery.has ? batteryElement(this, this._config, { battery, entities }) : spacer}
-                ${individualFieldLeftBottom
+                ${rvMode
+                  ? spacer
+                  : individualFieldLeftBottom
                   ? individualLeftBottomElement(this, this._config, {
                       displayState: getIndividualDisplayState(individualFieldLeftBottom),
                       individualObj: individualFieldLeftBottom,
@@ -632,7 +646,7 @@ export class PowerFlowCardPlus extends LitElement {
                       templatesObj,
                     })
                   : spacer}
-                ${checkHasRightIndividual(individualObjs)
+                ${!rvMode && checkHasRightIndividual(individualObjs)
                   ? individualRightBottomElement(this, this._config, {
                       displayState: getIndividualDisplayState(individualFieldRightBottom),
                       individualObj: individualFieldRightBottom,
@@ -654,7 +668,7 @@ export class PowerFlowCardPlus extends LitElement {
             {
               battery,
               grid,
-              individual: individualObjs,
+              individual: rvMode ? [] : individualObjs,
               newDur,
               solar,
               rvData: data.rvData,

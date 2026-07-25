@@ -1,19 +1,16 @@
 import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
-import {
-  checkHasBottomIndividual,
-  checkHasRightIndividual,
-} from "@flixlix-cards/shared/utils/compute-individual-position";
 import { html, nothing, svg } from "lit";
-import { classMap } from "lit/directives/class-map.js";
 import { type Flows } from "../index";
-import { RV_DC_FLOW_Y } from "./layout";
+import {
+  CABIN_BATTERY_TOP,
+  DC_BUS_CENTER,
+  RV_VERTICAL_COLUMN_WIDTH,
+} from "./anchors";
 
 export function flowDcBusToCabinBattery(
   config: FlowCardPlusConfig,
   {
-    battery,
-    individual,
     newDur,
     rvData,
   }: Pick<Flows, "battery" | "individual" | "newDur"> & { rvData: RvRuntimeData }
@@ -22,25 +19,19 @@ export function flowDcBusToCabinBattery(
   if (!rvData.rvMode || !rvData.cabinBattery.has || value <= 0) return nothing;
   const duration = newDur.dcBusToCabinBattery ?? config.max_flow_rate;
 
-  return html`<div
-    class="lines rv-dc-battery-flow-lines ${classMap({
-      high: battery.has || checkHasBottomIndividual(individual),
-      "individual1-individual2": !battery.has && individual.every((entry) => entry?.has),
-      "multi-individual": checkHasRightIndividual(individual),
-    })}"
-  >
+  return html`<div class="rv-flow-lines rv-battery-column-flow-lines rv-dc-battery-flow-lines">
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 ${RV_VERTICAL_COLUMN_WIDTH} 100"
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="none"
       id="rv-dc-bus-to-cabin-battery-flow"
-      class="flat-line"
       data-power-watts=${String(value)}
     >
       <path
         id="rv-dc-bus-to-cabin-battery-path"
         class="rv-dc-bus-to-cabin-battery-path"
-        d="M50,${RV_DC_FLOW_Y} V100"
+        d="M${DC_BUS_CENTER.verticalFromBelow.x},${DC_BUS_CENTER.verticalFromBelow
+          .y} V${CABIN_BATTERY_TOP.y}"
         vector-effect="non-scaling-stroke"
       ></path>
       ${checkShouldShowDots(config)

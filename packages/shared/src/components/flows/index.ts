@@ -15,7 +15,6 @@ import { flowDcBusToCabinBattery } from "./rv/dc-bus-to-cabin-battery";
 import { flowDcBusToRv } from "./rv/dc-bus-to-rv";
 import { flowDistributionToRvAc } from "./rv/distribution-to-rv-ac";
 import { flowShoreToDcBus } from "./rv/shore-to-dc-bus";
-import { flowShoreTotalToDistribution } from "./rv/shore-total-to-distribution";
 import { flowSolarToDcBus } from "./rv/solar-to-dc-bus";
 import { flowStarterToBooster } from "./rv/starter-to-booster";
 import { flowSolarToGrid } from "./solar-to-grid";
@@ -39,14 +38,7 @@ export const flowElement = (
   if (rvMode) {
     return html`
       ${rvData
-        ? html`${flowShoreTotalToDistribution(config, {
-            battery,
-            individual,
-            newDur,
-            rvData,
-            solar,
-          })}
-          ${flowDistributionToRvAc(config, { battery, individual, newDur, rvData, solar })}
+        ? html`${flowDistributionToRvAc(config, { battery, individual, newDur, rvData, solar })}
           ${flowShoreToDcBus(config, { battery, individual, newDur, rvData, solar })}
           ${flowSolarToDcBus(config, { battery, individual, newDur, rvData })}
           ${flowStarterToBooster(config, { newDur, rvData })}

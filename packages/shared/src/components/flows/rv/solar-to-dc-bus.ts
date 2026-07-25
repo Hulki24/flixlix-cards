@@ -1,29 +1,16 @@
 import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
-import {
-  checkHasBottomIndividual,
-  checkHasRightIndividual,
-} from "@flixlix-cards/shared/utils/compute-individual-position";
 import { html, nothing, svg } from "lit";
-import { classMap } from "lit/directives/class-map.js";
 import { type Flows } from "../index";
-import { RV_DC_FLOW_Y } from "./layout";
-
-const solarToDcBusDot = (config: FlowCardPlusConfig, value: number, duration: number) => {
-  if (!checkShouldShowDots(config) || value <= 0) return nothing;
-
-  return svg`<circle r="1" class="rv-solar-dc-bus-dot" vector-effect="non-scaling-stroke">
-      <animateMotion dur="${duration}s" repeatCount="indefinite" calcMode="paced">
-        <mpath xlink:href="#rv-solar-dc-bus-path" />
-      </animateMotion>
-    </circle>`;
-};
+import {
+  DC_BUS_CENTER,
+  RV_VERTICAL_COLUMN_WIDTH,
+  SOLAR_BOTTOM,
+} from "./anchors";
 
 export function flowSolarToDcBus(
   config: FlowCardPlusConfig,
   {
-    battery,
-    individual,
     newDur,
     rvData,
   }: Pick<Flows, "battery" | "individual" | "newDur"> & { rvData: RvRuntimeData }
@@ -32,28 +19,27 @@ export function flowSolarToDcBus(
   if (!rvData.rvMode || !rvData.solarCharger.has || value <= 0) return nothing;
 
   const duration = newDur.solarToDcBus ?? config.max_flow_rate;
-  return html`<div
-    class="lines rv-dc-source-flow-lines ${classMap({
-      high: battery.has || checkHasBottomIndividual(individual),
-      "individual1-individual2": !battery.has && individual.every((entry) => entry?.has),
-      "multi-individual": checkHasRightIndividual(individual),
-    })}"
-  >
+  return html`<div class="rv-flow-lines rv-middle-column-flow-lines rv-solar-dc-bus-flow-lines">
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 ${RV_VERTICAL_COLUMN_WIDTH} 100"
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="none"
       id="rv-solar-dc-bus-flow"
-      class="flat-line"
       data-power-watts=${String(value)}
     >
       <path
         id="rv-solar-dc-bus-path"
         class="rv-solar-dc-bus-path"
-        d="M50,0 V${RV_DC_FLOW_Y}"
+        d="M${SOLAR_BOTTOM.x},${SOLAR_BOTTOM.y} V${DC_BUS_CENTER.verticalFromAbove.y}"
         vector-effect="non-scaling-stroke"
       ></path>
-      ${solarToDcBusDot(config, value, duration)}
+      ${checkShouldShowDots(config)
+        ? svg`<circle r="1" class="rv-solar-dc-bus-dot" vector-effect="non-scaling-stroke">
+              <animateMotion dur="${duration}s" repeatCount="indefinite" calcMode="paced">
+                <mpath xlink:href="#rv-solar-dc-bus-path" />
+              </animateMotion>
+            </circle>`
+        : nothing}
     </svg>
   </div>`;
 }

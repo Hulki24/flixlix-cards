@@ -1,4 +1,4 @@
-export const DEFAULT_RV_AC_MINIMUM_POWER = 150;
+export const DEFAULT_RV_AC_MINIMUM_POWER = 0;
 
 interface RvAcDisplayConfig {
   rv?: {

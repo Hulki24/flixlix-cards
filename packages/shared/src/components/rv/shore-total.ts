@@ -6,7 +6,10 @@ import {
   type RvShoreRuntimeData,
 } from "@flixlix-cards/shared/types";
 import { displayValue } from "@flixlix-cards/shared/utils/display-value";
-import { html, nothing, type TemplateResult } from "lit";
+import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
+import { showLine } from "@flixlix-cards/shared/utils/show-line";
+import { styleLine } from "@flixlix-cards/shared/utils/style-line";
+import { html, nothing, svg, type TemplateResult } from "lit";
 
 function resolveSecondaryValue(main: CardMainContext, entityId?: string): number | null {
   if (!entityId) return null;
@@ -20,7 +23,8 @@ export function shoreTotalElement(
   main: CardMainContext,
   config: FlowCardPlusConfig,
   shore: RvShoreRuntimeData,
-  display: RvBubbleDisplayConfig
+  display: RvBubbleDisplayConfig,
+  flowDuration: number
 ): TemplateResult | typeof nothing {
   if (!shore.has) return nothing;
   const secondary = display.secondary_info;
@@ -72,5 +76,37 @@ export function shoreTotalElement(
         })}
       </span>
     </div>
+    ${showLine(config, shore.inputPower)
+      ? html`
+          <svg
+            width="80"
+            height="30"
+            id="rv-shore-distribution-flow"
+            data-build-marker="shore-direct-80x30"
+            data-power-watts=${String(shore.inputPower)}
+          >
+            <path
+              d="M40 -10 v40"
+              id="rv-shore-distribution-path"
+              class="rv-shore-distribution-path ${styleLine(shore.inputPower, config)}"
+            />
+            ${checkShouldShowDots(config) && shore.inputPower > 0
+              ? svg`<circle
+                    r="1.75"
+                    class="rv-shore-distribution-dot"
+                    vector-effect="non-scaling-stroke"
+                  >
+                    <animateMotion
+                      dur="${flowDuration}s"
+                      repeatCount="indefinite"
+                      calcMode="paced"
+                    >
+                      <mpath xlink:href="#rv-shore-distribution-path" />
+                    </animateMotion>
+                  </circle>`
+              : nothing}
+          </svg>
+        `
+      : nothing}
   </div>`;
 }

@@ -1,5 +1,7 @@
 // test that the card renders correctly
 
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const { unavailableOrMisconfiguredErrorMock } = vi.hoisted(() => ({
@@ -22,6 +24,11 @@ import { styles as cardStyles } from "@flixlix-cards/shared/style";
 import { type PowerFlowCardPlusConfig } from "@flixlix-cards/shared/types";
 import { render as renderTemplate } from "lit";
 import { PowerFlowCardPlus } from "../src/power-flow-card-plus";
+
+const sharedFlowSource = (relativePath: string): string =>
+  readFileSync(resolve(process.cwd(), `../../shared/src/components/flows/${relativePath}`), {
+    encoding: "utf8",
+  });
 
 // jsdom does not provide ResizeObserver; stub it so the card's `updated` hook doesn't throw
 (globalThis as any).ResizeObserver = class {
@@ -354,6 +361,50 @@ beforeEach(() => {
   unavailableOrMisconfiguredErrorMock.mockReset();
 });
 
+describe("RV flow isolation", () => {
+  const rvFlows = [
+    { relativePath: "rv/solar-to-dc-bus.ts" },
+    { relativePath: "rv/distribution-to-rv-ac.ts" },
+    { relativePath: "rv/shore-to-dc-bus.ts" },
+    { relativePath: "rv/dc-bus-to-rv.ts" },
+    { relativePath: "rv/dc-bus-to-cabin-battery.ts" },
+    { relativePath: "rv/cabin-battery-to-dc-bus.ts" },
+  ];
+
+  test.each(rvFlows)("$relativePath owns its RV wrapper and SVG", ({ relativePath }) => {
+      const source = sharedFlowSource(relativePath);
+
+      expect(source).not.toContain("classic-straight-flow");
+      expect(source).toContain("rv-flow-lines");
+      expect(source).toContain("checkShouldShowDots");
+    });
+
+  test("Classic straight flows retain their own original renderers", () => {
+    const gridSource = sharedFlowSource("grid-to-home.ts");
+    const solarBatterySource = sharedFlowSource("solart-to-battery.ts");
+
+    expect(gridSource).not.toContain("classic-straight-flow");
+    expect(gridSource).toContain('class="lines ${classMap');
+    expect(gridSource).toContain('d="M0,${battery.has ? 50 : solar.has ? 56 : 53} H100"');
+    expect(solarBatterySource).not.toContain("classic-straight-flow");
+    expect(solarBatterySource).toContain('d="M50,0 V100"');
+  });
+
+  test("RV anchors replace the removed shared coordinate engines", () => {
+    expect(
+      existsSync(resolve(process.cwd(), "../../shared/src/components/flows/rv/layout.ts"))
+    ).toBe(false);
+    expect(
+      existsSync(
+        resolve(process.cwd(), "../../shared/src/components/flows/rv/rv-flow-network.ts")
+      )
+    ).toBe(false);
+    expect(
+      existsSync(resolve(process.cwd(), "../../shared/src/components/flows/rv/anchors.ts"))
+    ).toBe(true);
+  });
+});
+
 describe("render", () => {
   test("renders correctly", () => {
     const config = {
@@ -492,53 +543,8 @@ describe("render", () => {
     );
   });
 
-  test.each([8, 149])(
-    "default AC minimum suppresses %s W while the DC branch remains active",
-    (acPower) => {
-      const { container, data } = renderRvFlowScenario({
-        shoreInput: 220,
-        acPower,
-        acOutput: 100,
-        batteryNet: 90,
-      });
-
-      expect(data.rvData.loads.acPower).toBe(acPower);
-      expect(data.rvData.rvDcConsumption).toBe(10);
-      expect(
-        container
-          .querySelector(".rv-shore-ac-input .rv-shore-power-value")
-          ?.getAttribute("data-power-watts")
-      ).toBe("0");
-      expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
-      expect(
-        container.querySelector("#rv-dc-bus-to-rv-flow")?.getAttribute("data-power-watts")
-      ).toBe("10");
-      expect(container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")).toBe(
-        "0"
-      );
-      expect(container.querySelector(".rv-home-ac-power")?.classList).toContain(
-        "rv-home-power--inactive"
-      );
-    }
-  );
-
-  test("AC minimum is inclusive at 150 W", () => {
-    const { container } = renderRvFlowScenario({ shoreInput: 220, acPower: 150 });
-
-    expect(
-      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
-    ).toBe("150");
-    expect(container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")).toBe(
-      "150"
-    );
-  });
-
-  test("explicit AC minimum 0 keeps an 8 W load visible", () => {
-    const { container } = renderRvFlowScenario({
-      shoreInput: 220,
-      acPower: 8,
-      acMinimumPower: 0,
-    });
+  test("default AC minimum 0 keeps a positive load visible", () => {
+    const { container } = renderRvFlowScenario({ shoreInput: 220, acPower: 8 });
 
     expect(
       container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
@@ -548,12 +554,37 @@ describe("render", () => {
     );
   });
 
+  test("explicit AC minimum 150 suppresses lower loads and remains inclusive", () => {
+    const below = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 149,
+      acMinimumPower: 150,
+    });
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 150,
+      acMinimumPower: 150,
+    });
+
+    expect(below.container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
+    expect(
+      below.container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")
+    ).toBe("0");
+    expect(
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
+    ).toBe("150");
+    expect(container.querySelector(".rv-home-ac-power")?.getAttribute("data-power-watts")).toBe(
+      "150"
+    );
+  });
+
   test("suppressed AC zero can be hidden without hiding an active DC branch", () => {
     const { container } = renderRvFlowScenario({
       shoreInput: 220,
       acPower: 8,
       acOutput: 100,
       batteryNet: 90,
+      acMinimumPower: 150,
       acDisplayZero: false,
     });
 
@@ -579,7 +610,7 @@ describe("render", () => {
     expect(container.querySelector("#rv-dc-bus-to-rv-flow")).toBeNull();
   });
 
-  test("RV AC and DC branches are straight, separated, and connected at fixed offsets", () => {
+  test("RV AC and DC branches use visible local anchors", () => {
     const { container } = renderRvFlowScenario({
       shoreInput: 894,
       acPower: 855,
@@ -589,22 +620,175 @@ describe("render", () => {
     });
     const shorePath = container.querySelector("#rv-shore-distribution-path")?.getAttribute("d");
     const acPath = container.querySelector("#rv-distribution-to-rv-ac-path")?.getAttribute("d");
+    const chargerPath = container.querySelector("#rv-shore-dc-bus-path")?.getAttribute("d");
     const dcPath = container.querySelector("#rv-dc-bus-to-rv-path")?.getAttribute("d");
     const solarPath = container.querySelector("#rv-solar-dc-bus-path")?.getAttribute("d");
+    const batteryPath = container
+      .querySelector("#rv-dc-bus-to-cabin-battery-path")
+      ?.getAttribute("d");
 
-    expect(shorePath).toMatch(/^M0,0 V\d+$/);
+    expect(shorePath).toBe("M40 -10 v40");
     expect(shorePath).not.toMatch(/[CQ]/);
-    expect(acPath).toBe("M0,34 H100");
-    expect(dcPath).toBe("M50,66 H100");
-    expect(solarPath).toBe("M50,0 V66");
+    expect(acPath).toBe("M0,4 H100");
+    expect(chargerPath).toBe("M0,4 H50");
+    expect(dcPath).toBe("M50,4 H100");
+    expect(solarPath).toBe("M40,0 V100");
+    expect(batteryPath).toBe("M40,0 V100");
     expect(acPath).not.toMatch(/[CQ]/);
+    expect(chargerPath?.split("H")[1]).toBe(dcPath?.match(/^M(\d+),/)?.[1]);
     expect(dcPath).not.toMatch(/[CQ]/);
-    expect(Number(acPath?.match(/M0,(\d+)/)?.[1])).toBeLessThan(
-      Number(dcPath?.match(/M50,(\d+)/)?.[1])
-    );
     expect(
       container.querySelector("#rv-solar-dc-bus-path.rv-distribution-to-rv-ac-path")
     ).toBeNull();
+  });
+
+  test("RV renderer uses three classic rows with three fixed fields each", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 100,
+      acOutput: 204,
+      solarOutput: 120,
+      batteryNet: 70,
+      starterVoltage: 13.2,
+    });
+    const rows = Array.from(container.querySelectorAll(".card-content > .row"));
+
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.children.length)).toEqual([3, 3, 3]);
+    expect(rows[0].children[0].id).toBe("rv-shore-total");
+    expect(rows[0].children[1].classList).toContain("solar");
+    expect(rows[0].children[2].classList).toContain("spacer");
+    expect(rows[1].children[0].classList).toContain("grid");
+    expect(rows[1].children[1].id).toBe("rv-dc-bus");
+    expect(rows[1].children[2].classList).toContain("home");
+    expect(rows[2].children[0].id).toBe("rv-starter-battery");
+    expect(rows[2].children[1].classList).toContain("battery");
+    expect(rows[2].children[2].classList).toContain("spacer");
+  });
+
+  test("RV flows use isolated semantic wrappers outside Classic lines", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 100,
+      acOutput: 204,
+      solarOutput: 120,
+      batteryNet: 70,
+    });
+    const cardContent = container.querySelector(".card-content");
+    const rows = Array.from(container.querySelectorAll(".card-content > .row"));
+    const lines = Array.from(container.querySelectorAll(".card-content > .rv-flow-lines"));
+    const flowIds = [
+      "#rv-distribution-to-rv-ac-flow",
+      "#rv-shore-dc-bus-flow",
+      "#rv-solar-dc-bus-flow",
+      "#rv-dc-bus-to-cabin-battery-flow",
+      "#rv-dc-bus-to-rv-flow",
+    ];
+
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.every((line) => line.parentElement === cardContent)).toBe(true);
+    expect(container.querySelector(".circle-container .rv-flow-lines")).toBeNull();
+    expect(
+      rows[2].compareDocumentPosition(lines[0]) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    for (const id of flowIds) {
+      const svg = container.querySelector(id);
+      expect(svg?.parentElement?.classList).toContain("rv-flow-lines");
+      expect(svg?.parentElement?.classList).not.toContain("lines");
+      expect(svg?.getAttribute("preserveAspectRatio")).toBe("none");
+    }
+  });
+
+  test("RV Shore owns its non-fossil-style flow inside the circle container", () => {
+    const { container } = renderRvFlowScenario({
+      shoreInput: 220,
+      acPower: 100,
+      acOutput: 204,
+      solarOutput: 120,
+      batteryNet: 70,
+    });
+    const shoreContainer = container.querySelector("#rv-shore-total");
+    const cssText = cardStyles.toString();
+    const shoreSvg = container.querySelector("#rv-shore-distribution-flow");
+    const flowSource = sharedFlowSource("index.ts");
+
+    expect(Array.from(shoreContainer?.children ?? []).map((child) => child.tagName)).toEqual([
+      "SPAN",
+      "DIV",
+      "svg",
+    ]);
+    expect(shoreContainer?.children[0].classList).toContain("label");
+    expect(shoreContainer?.children[1].classList).toContain("circle");
+    expect(shoreContainer?.children[2]).toBe(shoreSvg);
+    expect(shoreSvg?.parentElement).toBe(shoreContainer);
+    expect(shoreSvg?.getAttribute("width")).toBe("80");
+    expect(shoreSvg?.getAttribute("height")).toBe("30");
+    expect(shoreSvg?.getAttribute("viewBox")).toBeNull();
+    expect(shoreSvg?.getAttribute("preserveAspectRatio")).toBeNull();
+    expect(
+      container.querySelector("#rv-shore-distribution-path")?.getAttribute("d")
+    ).toBe("M40 -10 v40");
+    expect(
+      container.querySelector("#rv-shore-distribution-flow")?.getAttribute("data-build-marker")
+    ).toBe("shore-direct-80x30");
+    expect(
+      container
+        .querySelector("#rv-shore-distribution-flow animateMotion mpath")
+        ?.getAttribute("xlink:href")
+    ).toBe("#rv-shore-distribution-path");
+    expect(container.querySelectorAll("#rv-shore-distribution-flow")).toHaveLength(1);
+    expect(container.querySelector(".rv-shore-distribution-flow-lines")).toBeNull();
+    expect(flowSource).not.toContain("flowShoreTotalToDistribution");
+    expect(
+      existsSync(
+        resolve(
+          process.cwd(),
+          "../../shared/src/components/flows/rv/shore-total-to-distribution.ts"
+        )
+      )
+    ).toBe(false);
+    expect(cssText).not.toContain(".rv-shore-distribution-flow-lines");
+    expect(cssText).toMatch(
+      /\.rv-horizontal-flow-lines[\s\S]*right:\s*var\(--size-circle-entity\)[\s\S]*left:\s*var\(--size-circle-entity\)/
+    );
+    expect(cssText).toMatch(/\.rv-flow-lines[\s\S]*padding:\s*0/);
+    expect(cssText).toMatch(
+      /--rv-dc-bus-center-y:[\s\S]*--rv-dc-bus-offset-y[\s\S]*transform:\s*translateY\(var\(--rv-dc-bus-offset-y\)\)/
+    );
+  });
+
+  test("RV empty fields use the same Classic spacer and no-label rules", () => {
+    const config = {
+      type: "custom:power-flow-card-plus",
+      rv_mode: true,
+      no_labels: true,
+      entities: {
+        grid: { entity: "sensor.shore" },
+        home: { entity: "sensor.home", override_state: true },
+      },
+      rv: {
+        shore: { input_power: "sensor.shore" },
+        ac_charger: { output_power: "sensor.ac_output" },
+      },
+    } as PowerFlowCardPlusConfig;
+    const { container } = renderCard(
+      config,
+      makeHass({
+        "sensor.shore": "220",
+        "sensor.home": "0",
+        "sensor.ac_output": "204",
+      })
+    );
+    const rows = Array.from(container.querySelectorAll(".card-content > .row"));
+
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.children.length)).toEqual([3, 3, 3]);
+    expect(rows[0].children[1].classList).toContain("spacer");
+    expect(rows[0].children[2].classList).toContain("spacer");
+    expect(rows[2].children[0].classList).toContain("spacer");
+    expect(rows[2].children[1].classList).toContain("spacer");
+    expect(rows[2].children[2].classList).toContain("spacer");
+    expect(container.querySelector(".card-content")?.classList).toContain("no-labels");
   });
 
   test("RV bubble orders AC value, icon, and DC value without text labels", () => {
@@ -2256,7 +2440,9 @@ describe("_computeRenderData", () => {
     expect(data.rvData.loads.acPower).toBe(15);
     expect(data.rvData.loads.acPowerConfigured).toBe(true);
     expect(container.querySelector("#rv-shore-total")).not.toBeNull();
-    expect(container.querySelector("#rv-distribution-to-rv-ac-flow")).toBeNull();
+    expect(
+      container.querySelector("#rv-distribution-to-rv-ac-flow")?.getAttribute("data-power-watts")
+    ).toBe("15");
     expect(container.querySelector("#rv-shore-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-solar-dc-bus-flow")).not.toBeNull();
     expect(container.querySelector("#rv-booster-to-dc-bus-flow")).not.toBeNull();

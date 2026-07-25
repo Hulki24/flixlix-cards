@@ -1,6 +1,18 @@
 import { css } from "lit";
 
 export const rvStyles = css`
+  .card-content:has(.rv-dc-bus-container) {
+    --rv-top-row-circle-bottom-y: 100px;
+    --rv-main-row-top-y: 130px;
+    --rv-circle-radius: 40px;
+    --rv-ac-flow-center-y: 157px;
+    --rv-dc-bus-offset-y: 23px;
+    --rv-dc-bus-center-y: calc(
+      var(--rv-main-row-top-y) + var(--rv-circle-radius) + var(--rv-dc-bus-offset-y)
+    );
+    --rv-cabin-battery-top-y: 240px;
+  }
+
   .rv-dc-bus-container {
     position: relative;
     z-index: 2;
@@ -11,7 +23,63 @@ export const rvStyles = css`
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    transform: translateY(23px);
+    transform: translateY(var(--rv-dc-bus-offset-y));
+  }
+
+  .rv-flow-lines {
+    position: absolute;
+    z-index: 1;
+    box-sizing: border-box;
+    padding: 0;
+    pointer-events: none;
+  }
+
+  .rv-flow-lines svg {
+    position: static;
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .rv-horizontal-flow-lines {
+    right: var(--size-circle-entity);
+    left: var(--size-circle-entity);
+    width: auto;
+    height: 8px;
+  }
+
+  .rv-distribution-ac-flow-lines {
+    top: calc(var(--rv-ac-flow-center-y) - 4px);
+  }
+
+  .rv-dc-source-flow-lines,
+  .rv-dc-load-flow-lines {
+    top: calc(var(--rv-dc-bus-center-y) - 4px);
+  }
+
+  .rv-middle-column-flow-lines,
+  .rv-battery-column-flow-lines {
+    left: calc(50% - var(--rv-circle-radius));
+    width: var(--size-circle-entity);
+  }
+
+  .rv-solar-dc-bus-flow-lines {
+    top: var(--rv-top-row-circle-bottom-y);
+    height: calc(var(--rv-dc-bus-center-y) - var(--rv-top-row-circle-bottom-y));
+  }
+
+  .rv-battery-column-flow-lines {
+    top: var(--rv-dc-bus-center-y);
+    height: calc(var(--rv-cabin-battery-top-y) - var(--rv-dc-bus-center-y));
+  }
+
+  .rv-booster-to-dc-bus-flow-lines {
+    top: var(--rv-dc-bus-center-y);
+    right: 50%;
+    bottom: 100px;
+    left: 33%;
   }
 
   .rv-dc-bus-node {

@@ -1,23 +1,19 @@
 import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
-import {
-  checkHasBottomIndividual,
-  checkHasRightIndividual,
-} from "@flixlix-cards/shared/utils/compute-individual-position";
 import { html, nothing, svg } from "lit";
-import { classMap } from "lit/directives/class-map.js";
 import { getVisibleRvAcPower } from "../../../utils/rv-ac-display";
 import { type Flows } from "../index";
-import { RV_AC_FLOW_Y } from "./layout";
+import {
+  DISTRIBUTION_AC_RIGHT,
+  RV_AC_LEFT,
+  RV_HORIZONTAL_VIEWBOX_HEIGHT,
+} from "./anchors";
 
 export function flowDistributionToRvAc(
   config: FlowCardPlusConfig,
   {
-    battery,
-    individual,
     newDur,
     rvData,
-    solar,
   }: Pick<Flows, "battery" | "individual" | "newDur" | "solar"> & {
     rvData: RvRuntimeData;
   }
@@ -35,25 +31,18 @@ export function flowDistributionToRvAc(
   }
 
   const duration = newDur.distributionToRvAc ?? config.max_flow_rate;
-  return html`<div
-    class="lines rv-distribution-ac-flow-lines ${classMap({
-      high: battery.has || checkHasBottomIndividual(individual),
-      "individual1-individual2": !battery.has && individual.every((entry) => entry?.has),
-      "multi-individual": checkHasRightIndividual(individual),
-    })}"
-  >
+  return html`<div class="rv-flow-lines rv-horizontal-flow-lines rv-distribution-ac-flow-lines">
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 100 ${RV_HORIZONTAL_VIEWBOX_HEIGHT}"
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="none"
       id="rv-distribution-to-rv-ac-flow"
-      class="flat-line"
       data-power-watts=${String(value)}
     >
       <path
         id="rv-distribution-to-rv-ac-path"
         class="rv-distribution-to-rv-ac-path"
-        d="M0,${RV_AC_FLOW_Y} H100"
+        d="M${DISTRIBUTION_AC_RIGHT.x},${DISTRIBUTION_AC_RIGHT.y} H${RV_AC_LEFT.x}"
         vector-effect="non-scaling-stroke"
       ></path>
       ${checkShouldShowDots(config)

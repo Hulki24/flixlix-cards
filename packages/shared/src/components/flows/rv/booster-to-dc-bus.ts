@@ -2,7 +2,6 @@ import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shar
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
 import { html, nothing, svg } from "lit";
 import { type Flows } from "../index";
-import { RV_DC_FLOW_Y } from "./layout";
 
 export function flowBoosterToDcBus(
   config: FlowCardPlusConfig,
@@ -12,19 +11,18 @@ export function flowBoosterToDcBus(
   if (!rvData.rvMode || !rvData.booster.has || value <= 0) return nothing;
 
   const duration = newDur.boosterToDcBus ?? config.max_flow_rate;
-  return html`<div class="lines high rv-booster-flow-lines">
+  return html`<div class="rv-flow-lines rv-booster-to-dc-bus-flow-lines">
     <svg
       viewBox="0 0 100 100"
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="none"
       id="rv-booster-to-dc-bus-flow"
-      class="flat-line"
       data-power-watts=${String(value)}
     >
       <path
         id="rv-booster-to-dc-bus-path"
         class="rv-booster-to-dc-bus-path"
-        d="M25,100 Q45,100 50,${RV_DC_FLOW_Y}"
+        d="M0,100 L100,0"
         vector-effect="non-scaling-stroke"
       ></path>
       ${checkShouldShowDots(config)

@@ -1,32 +1,18 @@
 import { type FlowCardPlusConfig, type RvRuntimeData } from "@flixlix-cards/shared/types";
 import { checkShouldShowDots } from "@flixlix-cards/shared/utils/check-should-show-dots";
-import {
-  checkHasBottomIndividual,
-  checkHasRightIndividual,
-} from "@flixlix-cards/shared/utils/compute-individual-position";
 import { html, nothing, svg } from "lit";
-import { classMap } from "lit/directives/class-map.js";
 import { type Flows } from "../index";
-import { RV_DC_FLOW_Y } from "./layout";
-
-const shoreToDcBusDot = (config: FlowCardPlusConfig, value: number, duration: number) => {
-  if (!checkShouldShowDots(config) || value <= 0) return nothing;
-
-  return svg`<circle r="1" class="rv-shore-dc-bus-dot" vector-effect="non-scaling-stroke">
-      <animateMotion dur="${duration}s" repeatCount="indefinite" calcMode="paced">
-        <mpath xlink:href="#rv-shore-dc-bus-path" />
-      </animateMotion>
-    </circle>`;
-};
+import {
+  DC_BUS_CENTER,
+  DISTRIBUTION_DC_RIGHT,
+  RV_HORIZONTAL_VIEWBOX_HEIGHT,
+} from "./anchors";
 
 export function flowShoreToDcBus(
   config: FlowCardPlusConfig,
   {
-    battery,
-    individual,
     newDur,
     rvData,
-    solar,
   }: Pick<Flows, "battery" | "individual" | "newDur" | "solar"> & {
     rvData: RvRuntimeData;
   }
@@ -36,28 +22,28 @@ export function flowShoreToDcBus(
   if (!rvData.rvMode || !rvData.acCharger.has || !acChargerActive) return nothing;
 
   const duration = newDur.shoreToDcBus ?? config.max_flow_rate;
-  return html`<div
-    class="lines rv-dc-source-flow-lines ${classMap({
-      high: battery.has || checkHasBottomIndividual(individual),
-      "individual1-individual2": !battery.has && individual.every((entry) => entry?.has),
-      "multi-individual": checkHasRightIndividual(individual),
-    })}"
-  >
+  return html`<div class="rv-flow-lines rv-horizontal-flow-lines rv-dc-source-flow-lines">
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 100 ${RV_HORIZONTAL_VIEWBOX_HEIGHT}"
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="none"
       id="rv-shore-dc-bus-flow"
-      class="flat-line"
       data-power-watts=${String(value)}
     >
       <path
         id="rv-shore-dc-bus-path"
         class="rv-shore-dc-bus-path"
-        d="M0,${RV_DC_FLOW_Y} H50"
+        d="M${DISTRIBUTION_DC_RIGHT.x},${DISTRIBUTION_DC_RIGHT.y} H${DC_BUS_CENTER
+          .horizontal.x}"
         vector-effect="non-scaling-stroke"
       ></path>
-      ${shoreToDcBusDot(config, value, duration)}
+      ${checkShouldShowDots(config)
+        ? svg`<circle r="1" class="rv-shore-dc-bus-dot" vector-effect="non-scaling-stroke">
+              <animateMotion dur="${duration}s" repeatCount="indefinite" calcMode="paced">
+                <mpath xlink:href="#rv-shore-dc-bus-path" />
+              </animateMotion>
+            </circle>`
+        : nothing}
     </svg>
   </div>`;
 }
